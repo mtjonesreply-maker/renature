@@ -1,0 +1,1580 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hollow Copse Work Party</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: real-time work-day screen — HUD bar, the wood as a top-down map (the stage), and a side column for the crew, bank and zone condition. Single dark game look, matching the valley map. */
+:root{
+  color-scheme:dark;
+  --bg:#0E1511; --panel:#16201A; --panel-2:#1D2A22; --line:#2B3B30; --ink:#E6ECE2; --muted:#93A496;
+  --hivis:#D3E63A; --hivis-ink:#1C2408; --gold:#E3B54A; --good:#6CC488; --mid:#E2AE45; --poor:#EE7F73;
+  --display:"Zilla Slab",Georgia,serif; --body:"Source Sans 3","Segoe UI",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;padding-inline:16px;padding-block:14px 32px}
+.wrap{max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+button{font:inherit}
+button:focus-visible{outline:3px solid var(--hivis);outline-offset:2px}
+
+.hud{display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 16px}
+.brand{display:flex;flex-direction:column;margin-right:auto}
+.brand small{font-size:.7rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.brand b{font-family:var(--display);font-size:1.45rem;line-height:1.05}
+.res{display:flex;flex-direction:column;min-width:70px}
+.res small{font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.res span{font-family:var(--mono);font-size:1.1rem;font-variant-numeric:tabular-nums}
+.clock{font-family:var(--mono);font-size:1.6rem!important;color:var(--hivis)}
+.ctrls{display:flex;gap:6px;flex-wrap:wrap}
+.btn{font-weight:700;font-size:.92rem;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);cursor:pointer}
+.btn[aria-pressed="true"]{background:var(--hivis);color:var(--hivis-ink);border-color:var(--hivis)}
+.btn.primary{background:var(--hivis);color:var(--hivis-ink);border-color:var(--hivis)}
+.btn:disabled{opacity:.45;cursor:default}
+
+.main{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:12px;align-items:start}
+@media (max-width:1100px){.main{grid-template-columns:minmax(0,1fr)}}
+.scroller{overflow-x:auto;border-radius:14px;border:1px solid var(--line)}
+.stage{position:relative;min-width:760px;aspect-ratio:1600/1000;background:#3b3a24;touch-action:none;user-select:none;-webkit-user-select:none}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+.menu{position:absolute;z-index:5;min-width:230px;max-width:300px;max-height:calc(100% - 16px);overflow:auto;background:rgba(18,26,21,.97);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+.menu h3{font-family:var(--display);font-size:1.15rem;margin:0;line-height:1.15}
+.menu .latin{font-style:italic;color:var(--muted);font-size:.85rem;margin:-4px 0 0}
+.menu p{margin:0;font-size:.88rem;color:#C9D3C6}
+.menu .chip{align-self:flex-start;font-size:.66rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:2px 8px;border-radius:999px;color:#fff}
+.chip.invasive{background:#A8352F}.chip.native{background:#2E7A45}.chip.habitat{background:#87592C}.chip.litter{background:#55595E}.chip.unknown{background:#4B5A4F}
+.menu .acts{display:flex;flex-direction:column;gap:6px}
+.act{text-align:left;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);cursor:pointer;font-weight:700;font-size:.9rem}
+.act span{display:block;font-weight:400;font-size:.78rem;color:var(--muted)}
+.act:hover:not(:disabled){border-color:var(--hivis)}
+.act:disabled{opacity:.55;cursor:default}
+.act.warn{border-color:#7A4A2A}
+.menu .who{font-size:.8rem;color:var(--muted)}
+
+.toast{position:absolute;left:50%;top:12px;transform:translate(-50%,-6px);z-index:6;max-width:min(90%,540px);background:rgba(14,21,17,.94);border:1px solid var(--gold);padding:8px 14px;border-radius:10px;font-weight:600;font-size:.92rem;text-align:center;pointer-events:none;opacity:0;transition:opacity .25s,transform .25s}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast.bad{border-color:var(--poor)}
+
+.overlay{position:absolute;inset:0;z-index:8;display:grid;place-items:center;background:rgba(8,12,10,.62);padding:16px;overflow:auto}
+.sheet{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px 22px;max-width:640px;width:100%;display:flex;flex-direction:column;gap:12px;max-height:100%;overflow:auto}
+.sheet h2{font-family:var(--display);font-size:1.7rem;margin:0;line-height:1.1}
+.sheet>*{flex-shrink:0}
+.sheet p{margin:0}
+.sheet ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.eyebrow{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:0}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.band{font-weight:700;white-space:nowrap}
+.band.Good{color:var(--good)}.band.Moderate{color:var(--mid)}.band.Poor{color:var(--poor)}
+.note{padding:10px 12px;border-left:3px solid var(--gold);background:var(--panel-2);border-radius:0 10px 10px 0;font-size:.92rem}
+
+.side{display:flex;flex-direction:column;gap:12px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.card h2{font-family:var(--display);font-size:1.2rem;margin:0}
+.card .hint{font-size:.8rem;color:var(--muted);margin:0}
+.crew{display:flex;flex-direction:column;gap:6px}
+.vol{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 10px;align-items:center;text-align:left;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);cursor:pointer}
+.vol[aria-pressed="true"]{border-color:var(--hivis);box-shadow:inset 0 0 0 1px var(--hivis)}
+.vol .dot{grid-row:span 2;width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.7)}
+.vol b{font-size:.95rem;display:flex;justify-content:space-between;gap:6px}
+.vol b em{font-style:normal;font-weight:400;font-size:.75rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vol .st{font-size:.8rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vol .bar{grid-column:2;height:4px;border-radius:2px;background:var(--line);overflow:hidden}
+.vol .bar i{display:block;height:100%;background:var(--good)}
+.goals{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px;font-size:.88rem}
+.goals li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;align-items:center}
+.goals li span{color:var(--ink)}
+.goals li em{font-style:normal;font-family:var(--mono);font-size:.8rem;color:var(--muted)}
+.goals li .gb{grid-column:1/-1;height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+.goals li .gb i{display:block;height:100%;background:var(--good)}
+.goals li.done span{color:var(--good)}
+.goals li.keep .gb i{background:var(--gold)}
+.goals li.keep.bad span{color:var(--poor)}
+.rows{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:4px 10px;font-size:.9rem;margin:0}
+.rows dt{color:var(--muted)}
+.rows dd{margin:0;font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+.zones{display:flex;flex-direction:column;gap:5px;font-size:.9rem}
+.condhead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:1.05rem;margin-bottom:4px}
+.zones div.sub{font-size:.84rem;color:var(--muted)}
+.repmin{position:absolute;left:12px;top:12px;z-index:9;display:flex;gap:8px;flex-wrap:wrap}
+.repmin[hidden]{display:none}
+.zoomtag{position:absolute;right:12px;bottom:12px;z-index:6;background:rgba(14,21,17,.85);color:var(--muted);font-size:.8rem;padding:4px 8px;border-radius:8px;pointer-events:none}
+.joblegend{position:absolute;left:12px;bottom:12px;z-index:6;background:rgba(14,21,17,.9);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:.8rem;display:grid;grid-template-columns:auto 1fr;gap:3px 8px;align-items:center;pointer-events:none}.joblegend i{width:12px;height:12px;border-radius:50%;border:3px solid;display:inline-block}.joblegend[hidden]{display:none}
+.peeknote{align-self:center;background:rgba(14,21,17,.88);padding:6px 10px;border-radius:8px;font-size:.88rem;color:var(--muted)}
+.bjobs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}.bjobs li{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line);padding:3px 0}.bjobs em{font-style:normal;font-family:var(--mono);color:var(--muted);font-size:.85rem}
+.bpick{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.bpick .n{font-family:var(--mono);font-size:1.5rem;min-width:2ch;text-align:center}.bpick .sz{min-width:42px;justify-content:center}
+.best{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:.95rem}.best dt{color:var(--muted)}.best dd{margin:0;font-weight:600}
+.verdict{padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.04);border-left:4px solid var(--gold)}
+.facts{border:1px solid var(--line);border-radius:10px;padding:6px 10px;background:rgba(255,255,255,.03)}.facts summary{cursor:pointer;font-weight:700;color:var(--gold);font-size:.9rem}.facts ul{margin:6px 0 2px;padding-left:18px;display:flex;flex-direction:column;gap:5px;font-size:.86rem;line-height:1.4}
+.touch{display:none}
+@media (pointer:coarse){.touch{display:revert}.mouse{display:none!important}}
+.clearsel{position:absolute;right:12px;top:12px;z-index:7}.clearsel[hidden]{display:none}
+button,.btn,.act,.vol{touch-action:manipulation}
+.stage,.stage canvas{-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+.noshow{display:flex;gap:8px;align-items:center;font-size:.92rem;color:var(--muted);cursor:pointer}.noshow input{width:18px;height:18px;accent-color:var(--gold)}
+.sheet .row{display:flex;gap:8px;flex-wrap:wrap}
+.zones div{display:flex;justify-content:space-between;gap:8px}
+.log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px;max-height:190px;overflow-y:auto;font-size:.86rem}
+.log li{display:flex;gap:8px;border-bottom:1px solid var(--line);padding-bottom:5px}
+.log b{font-family:var(--mono);font-weight:500;color:var(--muted);font-size:.8rem;min-width:40px}
+.log li.bad span{color:#F2B3AB}.log li.good span{color:#BFE6C9}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+
+<div class="wrap">
+  <div class="hud">
+    <div class="brand"><small>Renature prototype · Saturday 17 October</small><b>Hollow Copse work party</b></div>
+    <div class="res"><small>Time</small><span class="clock" id="clock">10:00</span></div>
+    <div class="res"><small>Goodwill</small><span id="gw">58%</span></div>
+    <div class="res"><small>Bank value</small><span id="val">£0</span></div>
+    <div class="res"><small>Jobs done</small><span id="goalpct">0%</span></div>
+    <div class="ctrls" role="group" aria-label="Game speed">
+      <button class="btn" type="button" data-speed="0">Pause</button>
+      <button class="btn" type="button" data-speed="1" aria-pressed="true">1×</button>
+      <button class="btn" type="button" data-speed="2">2×</button>
+      <button class="btn" type="button" data-speed="4">4×</button>
+    </div>
+    <div class="ctrls" role="group" aria-label="Layers">
+      <button class="btn" type="button" id="canopyBtn">Canopy: faded</button>
+      <button class="btn" type="button" id="lightBtn" aria-pressed="false">Light map</button>
+      <button class="btn" type="button" id="jobsBtn" aria-pressed="false">Show jobs</button>
+    </div>
+    <div class="ctrls" role="group" aria-label="Zoom">
+      <button class="btn" type="button" id="zoomOut" aria-label="Zoom out">−</button>
+      <button class="btn" type="button" id="zoomFit">Fit</button>
+      <button class="btn" type="button" id="zoomIn" aria-label="Zoom in">+</button>
+    </div>
+    <div class="ctrls">
+      <button class="btn" type="button" id="help">Help</button>
+      <button class="btn" type="button" id="tea">Tea break</button>
+      <button class="btn primary" type="button" id="endday">End work day</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="scroller">
+      <div class="stage" id="stage">
+        <canvas id="cv"></canvas>
+        <div class="menu" id="menu" hidden></div>
+        <div class="toast" id="toast"></div>
+        <div class="overlay" id="intro" hidden>
+          <div class="sheet">
+            <p class="eyebrow">Week 42 · Autumn</p>
+            <h2>Six volunteers, five hours, one degraded wood</h2>
+            <p id="introLead">It's a mild October Saturday at Hollow Copse. The crew has signed in at the meet point by the gate, the tea urn is on, and there's far more work in the wood than one day can cover.</p>
+            <ul>
+              <li class="touch"><b>Tap volunteers</b> to select them (tap again to drop one), or drag a box around a group. Their cards on the right work too.</li>
+              <li class="touch"><b>Then tap a job</b> (a plant, tree or pile) to give it to them, or tap open ground to send them there. They are deselected once they have their orders.</li>
+              <li class="touch"><b>With nobody selected, tap anything to look at it.</b> Press and hold to look at something while volunteers are selected. Tap the woodland floor to see what grows there.</li>
+              <li><b>Zoom in</b> with the scroll wheel, a trackpad pinch or the + and − buttons; move around by right-click dragging or with the arrow keys (on a touchscreen, pinch and drag with two fingers). <b>Show jobs</b> rings everything still to do.</li>
+              <li class="mouse"><b>Select volunteers</b> by dragging a box around them, clicking one, or using their cards on the right. Hold Shift to add to a group.</li>
+              <li class="mouse"><b>Right-click</b> a plant, tree or pile to give your selected volunteers a job, or right-click open ground to send them there. They are deselected once they have their orders. On a touchscreen, press and hold instead.</li>
+              <li class="mouse"><b>Left-click</b> anything to look at it. A left-click also clears your selection. If nobody is selected, the nearest free volunteer takes the job.</li>
+              <li>Tasks take time. Cut material is carried back to the meet point: invasive brash goes on the fire, hazel and other produce is bundled to sell, and rubbish goes in the skip.</li>
+              <li><b>Light brings flowers.</b> Ground you open up fills with woodland flowers over the following seasons, unless bramble gets there first.</li>
+              <li class="mouse"><b>Left-click the woodland floor</b> to see what grows there and how much light reaches it. The Canopy and Light map buttons let you look through the layers.</li>
+              <li>Some shrubs look alike. Volunteers with a good eye for plants will spot a mistake before they make it; others won't.</li>
+            </ul>
+            <p id="introTail">At 15:00 the tools go back in the trailer and you get a condition report for the compartment.</p>
+            <button class="btn primary" type="button" id="start" style="align-self:flex-start">Start the work party</button>
+          </div>
+        </div>
+        <div class="overlay" id="brief" hidden><div class="sheet" id="briefsheet"></div></div>
+        <div class="repmin" id="peekbar" hidden><button class="btn primary" type="button" id="backbrief">Back to the briefing</button><span class="peeknote">Looking around on your own. The clock is stopped; tap anything to inspect it.</span></div>
+        <div class="overlay" id="report" hidden></div>
+        <button class="btn clearsel" type="button" id="clearsel" hidden>Clear selection</button>
+        <div class="zoomtag" id="zoomtag" hidden></div>
+        <div class="joblegend" id="joblegend" hidden></div>
+        <div class="repmin" id="repmin" hidden><button class="btn primary" type="button" id="repshow">Show day summary</button></div>
+      </div>
+    </div>
+
+    <aside class="side">
+      <div class="card">
+        <h2>Today's jobs</h2>
+        <ul class="goals" id="goals"></ul>
+        <button class="btn primary" type="button" id="early" hidden>All done: finish early</button>
+      </div>
+      <div class="card">
+        <h2>Crew</h2>
+        <p class="hint"><span class="mouse">Click to select. Shift-click or drag a box to select several.</span><span class="touch">Tap to select. Tap more to add them.</span></p>
+        <div class="crew" id="crew"></div>
+      </div>
+      <div class="card">
+        <h2>Bank at the meet point</h2>
+        <dl class="rows" id="bank"></dl>
+      </div>
+      <div class="card">
+        <h2>Condition</h2>
+        <div class="zones" id="zones"></div>
+      </div>
+      <div class="card">
+        <h2>Day log</h2>
+        <ul class="log" id="log"></ul>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+// ===================== world =====================
+const W = 1600, H = 1000;
+let ZONES = [
+  {id:'ash', name:'Ash scarp', x:40, y:40, w:480, h:375, node:'RL', ind:['invasive','natives','deadwood','groundflora'], tint:''},
+  {id:'rhodo', name:'Rhododendron thicket', x:540, y:40, w:520, h:375, node:'RC', ind:['invasive','natives','veteran','groundflora'], tint:''},
+  {id:'brook', name:'Brook gully', x:1080, y:40, w:480, h:375, node:'RR', ind:['invasive','disturbance','groundflora'], tint:'rgba(40,70,60,.22)'},
+  {id:'coppice', name:'Old coppice', x:40, y:455, w:480, h:320, node:'TL', ind:['structure','regen','deadwood'], tint:'rgba(150,130,40,.14)'},
+  {id:'bluebell', name:'Bluebell hollow', x:540, y:455, w:520, h:320, node:'T0', ind:['invasive','natives','veteran','regen','groundflora'], tint:'rgba(40,40,80,.16)'},
+  {id:'lane', name:'Lane edge', x:1080, y:455, w:480, h:320, node:'TR', ind:['disturbance','regen','invasive'], tint:'rgba(110,100,70,.14)'},
+];
+let ZMAP = Object.fromEntries(ZONES.map(z => [z.id, z]));
+let MEET = {x:600, y:815, w:400, h:140};
+let MO = [MEET.x - 600, MEET.y - 815], MK = 1;
+const mx = x => MEET.x + (x - 600) * MK, my = y => MEET.y + (y - 815) * MK;
+const NODES = {M:[800,880], T0:[800,795], TL:[280,795], TR:[1320,795], TA:[530,795], TB:[1070,795], RA:[530,435], RB:[1070,435], RL:[280,435], RC:[800,435], RR:[1320,435]};
+const EDGES = [['M','T0'],['T0','TA'],['TA','TL'],['T0','TB'],['TB','TR'],['TA','RA'],['TB','RB'],['RA','RL'],['RA','RC'],['RB','RC'],['RB','RR']];
+let BROOK = []; for (let t = 0; t <= 1.0001; t += 0.02) BROOK.push([1090 + t * 470 + Math.sin(t * 9) * 30, 45 + t * 365 + Math.cos(t * 7) * 20]);
+function catmull(P, n){ const out = []; for (let i = 0; i < P.length - 1; i++){ const p0 = P[Math.max(0, i - 1)], p1 = P[i], p2 = P[i + 1], p3 = P[Math.min(P.length - 1, i + 2)];
+  for (let k = 0; k < n; k++){ const t = k / n, t2 = t * t, t3 = t2 * t; out.push([.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3),
+    .5 * ((2 * p1[1]) + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3)]); } } out.push(P[P.length - 1]); return out; }
+let RIDES = [
+  {w:22, pts:catmull([[30,446],[190,428],[360,452],[560,430],[760,452],[960,428],[1110,450],[1300,426],[1460,446],[1575,432]], 12)},
+  {w:22, pts:catmull([[30,800],[170,786],[330,806],[530,790],[720,806],[880,788],[1070,808],[1260,788],[1430,804],[1575,792]], 12)},
+  {w:18, pts:catmull([[560,430],[520,520],[548,610],[516,700],[530,790]], 12)},
+  {w:18, pts:catmull([[1110,450],[1088,540],[1112,640],[1076,720],[1070,808]], 12)},
+  {w:18, pts:catmull([[800,795],[796,820],[802,846]], 6)},
+];
+let FOOTPATH = catmull([[40,110],[170,128],[300,170],[420,240],[520,330],[560,430]], 10);
+let TRACKS = [FOOTPATH];
+const onTrack = (x, y) => TRACKS.some(P => P.length && distToLine(P, x, y) < 9);
+let BRIDGES = BROOK.length ? [[0.3, 0], [0.72, 0]].map(([t]) => BROOK[Math.round(t * (BROOK.length - 1))]) : [];
+function distToLine(P, x, y){ let m = 1e9; for (let i = 1; i < P.length; i++){ const [ax, ay] = P[i - 1], [bx, by] = P[i]; const dx = bx - ax, dy = by - ay, t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1))); m = Math.min(m, Math.hypot(ax + dx * t - x, ay + dy * t - y)); } return m; }
+const onRide = (x, y) => RIDES.some(r => distToLine(r.pts, x, y) < r.w / 2 + 2);
+const dropFor = () => Object.fromEntries(Object.entries({brash:[668,912], poles:[792,930], peasticks:[792,930], greenery:[792,930], woodchip:[720,930], nettles:[792,930], firewood:[872,926], litter:[948,902], item:[905,858]}).map(([k, [x, y]]) => [k, [mx(x), my(y)]]));
+let DROP = dropFor();
+
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const inRect = (x, y, r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+function zoneAt(x, y){ for (const z of ZONES) if (inRect(x, y, z)) return z.id; if (inRect(x, y, MEET)) return 'meet'; return 'ride'; }
+function nearestNode(x, y){ let b = null, bd = 1e9; for (const k in NODES){ const d = Math.hypot(NODES[k][0]-x, NODES[k][1]-y); if (d < bd){ bd = d; b = k; } } return b; }
+function route(a, b){
+  const dist = {}, prev = {}, Q = new Set(Object.keys(NODES));
+  for (const k of Q) dist[k] = Infinity; dist[a] = 0;
+  while (Q.size){ let u = null; for (const k of Q) if (u === null || dist[k] < dist[u]) u = k; Q.delete(u); if (u === b) break;
+    for (const [p, q] of EDGES){ const v = p === u ? q : q === u ? p : null; if (!v || !Q.has(v)) continue;
+      const d = dist[u] + Math.hypot(NODES[u][0]-NODES[v][0], NODES[u][1]-NODES[v][1]); if (d < dist[v]){ dist[v] = d; prev[v] = u; } } }
+  const out = [b]; while (out[0] !== a) out.unshift(prev[out[0]]); return out;
+}
+// ---- free movement: cost grid + A* ----
+const GC = 10, GW = W / GC, GH = H / GC; let COST = null;
+const THICK = {blackthorn:1.9, rhodo:2.3, rhodoSmall:1.5, laurel:1.9, bramble:2.0, holly:1.5, hazel:1.5, hawthorn:1.4, elder:1.3};
+function buildCost(){ const C = new Float32Array(GW * GH).fill(1);
+  for (let r = 0; r < GH; r++) for (let c = 0; c < GW; c++){ const x = (c + .5) * GC, y = (r + .5) * GC, i = r * GW + c;
+    if ((OUTLINE ? !inPlay(x, y) : y > 948) || x < 6 || x > W - 6 || y < 6){ C[i] = Infinity; continue; }
+    if (onRide(x, y)) C[i] = .6; else if (onTrack(x, y)) C[i] = .8;
+    if (distToBrook(x, y) < 15 && !BRIDGES.some(b => Math.hypot(b[0] - x, b[1] - y) < 24)) C[i] = Infinity; }
+  for (const o of OBJS){ const d = DEF[o.type];
+    if (d.canopy && (isCanopyNow(o) || o.type === 'veteran')){ stamp(C, o.x, o.y, d.trunk + 7, Infinity); continue; }
+    if (o.type === 'ash' && o.state === 'felled'){ stamp(C, o.x, o.y, 22, 2.2); continue; }
+    const th = THICK[o.type]; if (th && (o.state === 'present' || (o.type === 'hazel' && o.state === 'present'))) stamp(C, o.x, o.y, o.r * .85, th, true); }
+  COST = C; }
+function stamp(C, x, y, R, v, maxOnly){ const c0 = Math.max(0, Math.floor((x - R) / GC)), c1 = Math.min(GW - 1, Math.floor((x + R) / GC)), r0 = Math.max(0, Math.floor((y - R) / GC)), r1 = Math.min(GH - 1, Math.floor((y + R) / GC));
+  for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++){ if (Math.hypot((c + .5) * GC - x, (r + .5) * GC - y) > R) continue; const i = r * GW + c; if (C[i] === Infinity) continue; C[i] = maxOnly ? Math.max(C[i] === .6 ? 1 : C[i], v) : v; } }
+const cellOf = (x, y) => [Math.min(GW - 1, Math.max(0, Math.floor(x / GC))), Math.min(GH - 1, Math.max(0, Math.floor(y / GC)))];
+function costAt(x, y){ if (!COST) return 1; const [c, r] = cellOf(x, y); const v = COST[r * GW + c]; return v === Infinity ? 1.5 : v; }
+function freeCell(c, r){ if (COST[r * GW + c] !== Infinity) return [c, r]; for (let rad = 1; rad < 12; rad++) for (let dr = -rad; dr <= rad; dr++) for (let dc = -rad; dc <= rad; dc++){ const cc = c + dc, rr = r + dr; if (cc < 0 || rr < 0 || cc >= GW || rr >= GH) continue; if (COST[rr * GW + cc] !== Infinity) return [cc, rr]; } return [c, r]; }
+function astar(sx, sy, tx, ty){
+  if (!COST) buildCost();
+  let [c0, r0] = freeCell(...cellOf(sx, sy)), [c1, r1] = freeCell(...cellOf(tx, ty)); const S = r0 * GW + c0, T = r1 * GW + c1, N = GW * GH;
+  const g = new Float32Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1), closed = new Uint8Array(N); const heap = [];
+  const push = (i, f) => { heap.push([f, i]); let k = heap.length - 1; while (k){ const p = (k - 1) >> 1; if (heap[p][0] <= heap[k][0]) break; [heap[p], heap[k]] = [heap[k], heap[p]]; k = p; } };
+  const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length){ heap[0] = last; let k = 0; for (;;){ const l = 2 * k + 1, r = l + 1; let m = k; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === k) break; [heap[m], heap[k]] = [heap[k], heap[m]]; k = m; } } return top; };
+  const h = i => { const dc = Math.abs(i % GW - c1), dr = Math.abs((i / GW | 0) - r1); return .6 * (Math.max(dc, dr) + .414 * Math.min(dc, dr)); };
+  g[S] = 0; push(S, h(S));
+  while (heap.length){ const [, u] = pop(); if (closed[u]) continue; closed[u] = 1; if (u === T) break; const uc = u % GW, ur = u / GW | 0;
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++){ if (!dr && !dc) continue; const vc = uc + dc, vr = ur + dr; if (vc < 0 || vr < 0 || vc >= GW || vr >= GH) continue; const v = vr * GW + vc; if (closed[v] || COST[v] === Infinity) continue;
+      if (dr && dc && (COST[ur * GW + vc] === Infinity || COST[vr * GW + uc] === Infinity)) continue;
+      const step = (dr && dc ? 1.414 : 1) * (COST[u] + COST[v]) / 2, ng = g[u] + step; if (ng < g[v]){ g[v] = ng; prev[v] = u; push(v, ng + h(v)); } } }
+  if (prev[T] < 0 && T !== S) return [[tx, ty]];
+  const cells = []; for (let k = T; k !== -1 && k !== S; k = prev[k]) cells.unshift(k); cells.unshift(S);
+  const pts = cells.map(k => [(k % GW + .5) * GC, ((k / GW | 0) + .5) * GC]);
+  // string-pull, never shortcutting through worse ground than the route itself
+  const out = [pts[0]]; let i = 0;
+  while (i < pts.length - 1){ let j = pts.length - 1; let worst = 0; for (let k = i; k <= j; k++) worst = Math.max(worst, COST[cells[k]]);
+    for (; j > i + 1; j--){ worst = 0; for (let k = i; k <= j; k++) worst = Math.max(worst, COST[cells[k]]); if (lineOK(pts[i], pts[j], worst)) break; }
+    out.push(pts[j]); i = j; }
+  out.shift(); out.push([tx, ty]); return out;
+}
+function lineOK(a, b, worst){ const n = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / (GC / 2)); for (let k = 1; k < n; k++){ const x = a[0] + (b[0] - a[0]) * k / n, y = a[1] + (b[1] - a[1]) * k / n; const [c, r] = cellOf(x, y), v = COST[r * GW + c]; if (v === Infinity || v > worst + .01) return false; } return true; }
+function pathTo(u, tx, ty){ const [c, r] = freeCell(...cellOf(tx, ty)); const p = astar(u.x, u.y, (c + .5) * GC, (r + .5) * GC); p[p.length - 1] = COST[cellOf(tx, ty)[1] * GW + cellOf(tx, ty)[0]] === Infinity ? [(c + .5) * GC, (r + .5) * GC] : [tx, ty]; return p; }
+
+// ===================== objects =====================
+const DEF = {
+  rhodo:{label:'Rhododendron', latin:'Rhododendron ponticum', cat:'invasive', r:66, inv:3, shrub:true, ever:true, work:80, loads:3, shade:.92,
+    note:'Dense evergreen shade: almost nothing grows underneath. Cut it, carry the brash to the fire at the meet point (it must not leave the site), then treat the stumps or it regrows.'},
+  rhodoSmall:{label:'Young rhododendron', latin:'Rhododendron ponticum', cat:'invasive', r:30, inv:1, shrub:true, ever:true, work:30, loads:1, shade:.6,
+    note:'A seedling that has crept down the gully. Small now, which is the cheapest time to deal with it.'},
+  laurel:{label:'Cherry laurel', latin:'Prunus laurocerasus', cat:'invasive', r:52, inv:2, shrub:true, ever:true, work:50, loads:2, shade:.85,
+    note:'A garden escape with big, glossy, pale-green leaves. Birds spread its berries. Easily confused with holly at a glance.'},
+  holly:{label:'Holly', latin:'Ilex aquifolium', cat:'native', r:30, shrub:true, native:true, nshrub:true, ever:true, work:25, loads:0, shade:.55, produce:['greenery','greenery'],
+    note:'Native evergreen: winter shelter and berries for thrushes. Darker, smaller, spiny leaves. Best left standing, though berried holly sells as Christmas greenery, and cutting it lets light in. It regrows from the stump.'},
+  hazel:{label:'Hazel stool', latin:'Corylus avellana', cat:'native', nshrub:true, r:52, work:40, shade:.7,
+    note:'Overstood coppice: tall, crowded poles shading the floor. Cutting a few stools a year on rotation brings back light and a new age class.'},
+  hawthorn:{label:'Hawthorn', latin:'Crataegus monogyna', cat:'native', nshrub:true, r:30, shade:.45, work:30, produce:['firewood'],
+    note:'Native understorey shrub, covered in red haws this time of year. Thrushes, redwings and fieldfares feed on them all winter.'},
+  elder:{label:'Elder', latin:'Sambucus nigra', cat:'native', nshrub:true, r:28, shade:.35, work:20, produce:[],
+    note:'A native shrub of disturbed, nutrient-rich ground. The last berries are going to the birds; the leaves are already yellowing.'},
+  bramble:{label:'Bramble', latin:'Rubus fruticosus agg.', cat:'native', r:48, shade:.25, work:22, smother:true, regrow:3,
+    note:'Both friend and problem. Nectar, berries and nesting cover, and deer can’t reach into it, so young trees inside a patch are protected for free. But it smothers the woodland flowers beneath it, and it races into any gap you open. Cutting it back lets the flowers through, but it is back from the roots every spring and races into any new light, so it needs cutting again each autumn or winter.'},
+  ash:{label:'Dying ash', latin:'Fraxinus excelsior with ash dieback', cat:'native', canopy:true, r:20, crown:74, trunk:9, spriteR:74, shade:.15, work:45,
+    note:'Ash dieback has killed most of the crown, so light floods through and bramble is surging below. It leans over the footpath and will drop limbs. Felling needs someone confident with a saw.'},
+  oak:{label:'Oak standard', latin:'Quercus robur', cat:'native', canopy:true, r:16, crown:80, trunk:11, shade:.6,
+    note:'A mature oak above the understorey: part of the canopy layer. Oaks support more insect species than any other British tree.'},
+  beech:{label:'Beech', latin:'Fagus sylvatica', cat:'native', canopy:true, r:16, crown:82, trunk:11, shade:.82,
+    note:'Typical of chalk hangers. Beech casts the deepest shade of any native tree, so the floor beneath it is mostly bare leaf litter.'},
+  alder:{label:'Alder', latin:'Alnus glutinosa', cat:'native', canopy:true, r:14, crown:62, trunk:9, shade:.55,
+    note:'A wet-ground tree lining the brook. Its roots fix nitrogen and hold the bank together.'},
+  birch:{label:'Silver birch', latin:'Betula pendula', cat:'native', canopy:true, r:12, crown:56, trunk:7, shade:.3,
+    note:'A pioneer tree with a light, airy crown. Plenty of light gets through to the floor beneath it.'},
+  veteran:{label:'Veteran oak', latin:'Quercus robur, several centuries old', cat:'habitat', canopy:true, r:30, crown:128, trunk:24, shade:.55, halo:185,
+    note:'An ancient tree with a hollow trunk, dead limbs and rot holes: homes for bats, owls and rare beetles. Evergreen shrubs crowding its crown and roots are shading out its lower branches. Clearing a halo around it is one of the most valuable jobs in the wood.'},
+  deadwood:{label:'Fallen deadwood', latin:'Decaying oak limb', cat:'habitat', r:52, work:12,
+    note:'Rotting wood feeds fungi, beetles and the birds that eat them. It would make good firewood, which is exactly the problem.'},
+  balsam:{label:'Himalayan balsam', latin:'Impatiens glandulifera', cat:'invasive', r:40, inv:2,
+    note:'Brown stems and burst seed pods: it seeded in August. Nothing useful can be done in October. Pull it next June, before it flowers.'},
+  sapling:{label:'Oak sapling', latin:'Quercus robur', cat:'native', r:14, work:8,
+    note:'Natural regeneration: the next generation of canopy. Deer browse the leading shoot unless it is guarded.'},
+  blackthorn:{label:'Blackthorn', latin:'Prunus spinosa', cat:'native', nshrub:true, r:34, shade:.45, work:30, produce:['firewood'],
+    note:'Dense, thorny native scrub. White blossom before the leaves in spring, sloes in autumn. Brown hairstreak butterflies lay their eggs on it, and nesting birds hide in it.'},
+  laurelSmall:{label:'Young cherry laurel', latin:'Prunus laurocerasus', cat:'invasive', r:26, inv:1, shrub:true, ever:true, work:20, loads:1, shade:.5,
+    note:'A laurel seedling, spread here by birds from the big clumps next door. Glossy leaves, easy to confuse with holly at a glance.'},
+  dogwood:{label:'Dogwood', latin:'Cornus sanguinea', cat:'native', r:34, shade:.45, work:20, smother:true, regrow:3, cut:['woodchip'],
+    note:'A native shrub that suckers into any sunny gap and makes dense thickets. Blood-red stems in winter, white flowers in June, black berries for the birds. Cut it back and it regrows; the cut stems chip well.'},
+  nettle:{label:'Stinging nettles', latin:'Urtica dioica', cat:'native', r:30, shade:.3, work:10, smother:true, regrow:1, cut:['nettles'],
+    note:'A sign of nutrient-rich, disturbed ground. Peacock and small tortoiseshell caterpillars feed on it, but a dense bed shades out the woodland flowers. Young tops sell, in small amounts, for nettle tea and herbal remedies.'},
+  young:{label:'Young oak', latin:'Quercus robur', cat:'native', canopy:true, r:10, crown:40, trunk:5, shade:.35,
+    note:'A sapling that made it: a few years old and above the reach of deer now. Given room and light it will join the canopy as a standard.'},
+  hearth:{label:'Charcoal hearth', latin:'An old charcoal-burning platform', cat:'habitat', r:60,
+    note:'A level platform where charcoal was burned in earth-covered clamps, probably for the last time a century ago. The soil is still black with charcoal a few centimetres down, which keeps the glade open and suits fungi and a few specialist plants. Keep it clear of scrub; don\'t dig.'},
+  sett:{label:'Badger sett', latin:'Meles meles', cat:'habitat', r:44,
+    note:'An active sett: spoil heaps, well-worn paths and fresh bedding dragged in at the entrances. Badgers and their setts are protected by law (Protection of Badgers Act 1992), so heavy work, cutting and machinery stay outside the buffer around it.'},
+  netting:{label:'Old pheasant-pen netting', cat:'litter', r:32, work:12, cost:10, gw:1, note:'Rusty wire netting from an old release pen. Deer and badgers get tangled in it.'},
+  pots:{label:'Dumped garden rubbish', cat:'litter', r:26, work:8, cost:5, gw:1, note:'Plant pots and clippings tipped over the boundary. This is how laurel got into the wood in the first place.'},
+  mattress:{label:'Fly-tipped mattress', cat:'litter', r:38, work:10, cost:20, gw:2, note:'Dumped from the lane. Heavy, sodden and £20 to dispose of.'},
+  tyre:{label:'Old tyre', cat:'litter', r:22, work:6, cost:5, gw:1, note:'Awkward to carry, but it has to go.'},
+  bags:{label:'Rubbish bags', cat:'litter', r:24, work:4, cost:5, gw:1, note:'Torn open by foxes overnight.'},
+  cans:{label:'Drinks cans', cat:'litter', r:14, work:2, cost:5, gw:1, note:'Small mammals get trapped in these.'},
+  rubble:{label:"Builders' rubble", cat:'litter', r:34, work:15, cost:5, gw:2, note:'A van load tipped by the gate. The neighbours have noticed.'},
+};
+let LAYOUT = [
+  // Ash scarp: a beech-and-ash hanger opened up by dieback
+  ['beech',85,85],['ash',165,165],['ash',305,225],['ash',445,275],['laurel',130,345],['holly',395,100],['deadwood',250,355],
+  ['bramble',375,345],['sapling',378,342],['bramble',70,232],['hawthorn',475,120],
+  // Rhododendron thicket around the old boundary oak
+  ['veteran',820,225,'Boundary oak'],['rhodo',630,120],['rhodo',830,95],['rhodo',985,200],['rhodo',710,300],['rhodo',915,345],['rhodo',570,270],
+  ['holly',770,385],['deadwood',620,385],['oak',1010,330],
+  // Brook gully: alder along the water
+  ['alder',1145,85],['alder',1280,165],['alder',1415,270],['alder',1525,185],['balsam',1170,160],['balsam',1300,250],['balsam',1460,340],
+  ['rhodoSmall',1470,110],['tyre',1355,330],['elder',1210,345],
+  // Old coppice with oak standards
+  ['oak',240,615],['oak',470,495],['hazel',120,530],['hazel',280,520],['hazel',430,555],['hazel',170,690],['hazel',360,700],
+  ['sapling',480,645],['sapling',95,615],['bramble',75,745],['sapling',78,742],['deadwood',455,745],
+  // Bluebell hollow under the old pollard
+  ['veteran',800,610,'Hollow pollard'],['laurel',650,520],['laurel',955,525],['laurel',930,705],['laurel',690,710],['holly',725,500],['holly',1005,640],
+  ['sapling',590,620],['sapling',860,745],['hawthorn',585,740],
+  // Lane edge
+  ['birch',1160,690],['birch',1530,740],['laurel',1170,525],['hawthorn',1385,495],['sapling',1255,590],['sapling',1400,610],
+  ['mattress',1450,705],['tyre',1345,745],['bags',1525,640],['cans',1250,700],['rubble',1490,520],
+];
+
+// ---- fact files: why the invasive species have to go ----
+const FACTS = {
+  rhodo: {title:'Fact file: why rhododendron has to go', items:[
+    'Introduced to Britain in 1763 as a garden shrub, later planted as cover for game birds. It is now one of the most damaging invasive plants in British woods.',
+    'Its dense evergreen canopy lets almost no light through, so the woodland flowers, ferns and tree seedlings beneath it die out.',
+    'Its roots and acidic leaf litter release chemicals that stop other plants germinating (allelopathy), so the ground stays bare even after it has gone.',
+    'Leaves, flowers and nectar contain grayanotoxins, poisonous to livestock; honey made from it is toxic. Very few native insects can feed on it.',
+    'It carries Phytophthora ramorum, the pathogen behind sudden larch death, which also threatens heathland and some oaks. That is why cut material should not leave the site.',
+    'One large bush can shed several million tiny, wind-blown seeds a year, and branches root wherever they touch the ground.',
+    'Disposal: burning on site is allowed only in safe weather, with the fire service told, and no more than about 10 cubic metres a day. It makes a lot of smoke, so stand upwind. Many sites stack the cut stems in windrows instead. Every stump must be treated, or it resprouts.']},
+  laurel: {title:'Fact file: why cherry laurel has to go', items:[
+    'A garden plant from south-east Europe, grown in Britain since the 1600s. Birds eat the cherries and drop the seeds deep into woodland.',
+    'It tolerates deep shade and forms a dense evergreen thicket, shading out bluebells and the rest of the ground flora.',
+    'Its leaves contain cyanogenic glycosides: crushed or chipped leaves give off hydrogen cyanide. Chip it in the open air, and never shred it in an enclosed space.',
+    'Cut stumps regrow vigorously, so like rhododendron they must be treated.',
+    'Young laurel is easily mistaken for native holly. Laurel leaves are larger, glossier, paler and have no spines.']},
+  balsam: {title:'Fact file: why Himalayan balsam has to go', items:[
+    'Introduced in 1839 as a garden plant, now along most lowland rivers in Britain.',
+    'Each plant fires up to 800 seeds several metres from exploding pods, and rivers carry them downstream.',
+    'It dies back in autumn and leaves riverbanks bare, so the soil washes away in winter floods.',
+    'Its sugary nectar draws bumblebees away from native flowers.',
+    'Pull it before it flowers in June, and start at the top of the catchment and work downstream.']},
+};
+FACTS.rhodoSmall = FACTS.rhodo; FACTS.laurelSmall = FACTS.laurel;
+let OBJS = [];
+let CANOPY_PLAN = {ash:{cover:.45, kinds:['beech','beech','oak']}, rhodo:{cover:.8, kinds:['oak','oak','beech']}, brook:{cover:.6, kinds:['alder','alder','oak']}, coppice:{cover:.55, kinds:['oak']}, bluebell:{cover:.8, kinds:['oak','oak','beech']}, lane:{cover:.45, kinds:['birch','oak','birch']}};
+function newObj(type, x, y, name, i){ const d = DEF[type]; return {id:i, type, name, x, y, r:d.r, zone:zoneAt(x, y), state:'present', identified:!d.shrub, work:0, need:0, loads:[], sprite:null, crownSprite:null, flash:0}; }
+function makeObjs(){
+  OBJS = LAYOUT.map(([type, x, y, name], i) => { const o = newObj(type, x, y, name, i); if (type === 'sapling') o.yrs = (i * 7) % 6; if (type === 'oak' || type === 'beech') o.yrs = (i * 13) % 50 - 20; return o; });
+  // fill the canopy layer: standards spread through each zone, crowns overlapping into a broken canopy
+  const r = rng(2026);
+  for (const z of ZONES){
+    const plan = CANOPY_PLAN[z.id], area = z.w * z.h;
+    let cover = OBJS.filter(o => o.zone === z.id && DEF[o.type].canopy).reduce((a, o) => a + Math.PI * DEF[o.type].crown ** 2 * .75, 0);
+    for (let k = 0; k < 600 && cover < plan.cover * area; k++){
+      const type = plan.kinds[Math.floor(r() * plan.kinds.length)], d = DEF[type];
+      const x = z.x + 22 + r() * (z.w - 44), y = z.y + 22 + r() * (z.h - 44);
+      if (RIDES.some(rd => distToLine(rd.pts, x, y) < 34) || TRACKS.some(P => P.length && distToLine(P, x, y) < 22)) continue;
+      if (inRect(x, y, {x:MEET.x - 40, y:MEET.y - 40, w:MEET.w + 80, h:MEET.h + 80}) || !inPlay(x, y)) continue;
+      if (OBJS.some(o => o.type === 'hearth' && Math.hypot(o.x - x, o.y - y) < 190)) continue;
+      if (OBJS.some(o => { const dd = Math.hypot(o.x - x, o.y - y); return DEF[o.type].canopy ? dd < (DEF[o.type].crown + d.crown) * .62 : dd < o.r * .75 + d.trunk + 10; })) continue;
+      if (z.id === 'brook' && distToBrook(x, y) < 18) continue;
+      const nw = newObj(type, x, y, null, OBJS.length); nw.yrs = Math.floor(r() * 130) - 90; OBJS.push(nw); cover += Math.PI * d.crown ** 2 * .75;
+    }
+  }
+}
+const isCanopyNow = o => DEF[o.type].canopy && (o.type !== 'ash' || o.state === 'present');
+function hitR(o){ const d = DEF[o.type]; if (isCanopyNow(o)) return d.trunk + 16; if (o.type === 'ash') return o.state === 'logged' ? 14 : 62; return Math.max(o.r, 20) + 4; }
+function objAt(x, y){
+  let best = null, bs = 1e9;
+  for (const o of OBJS){ if (o.state === 'gone' || isCanopyNow(o) || (o.state === 'cutback' && !o.loads.length)) continue; const d = Math.hypot(o.x - x, o.y - y), R = o.state === 'cutback' ? 24 : hitR(o); if (d < R){ const sc = d / Math.max(14, Math.min(R, 40)); if (sc < bs){ bs = sc; best = o; } } }
+  if (best) return best;
+  for (const o of OBJS){ if (!isCanopyNow(o)) continue; if (Math.hypot(o.x - x, o.y - y) < hitR(o)) return o; }
+  return null;
+}
+const inBramble = o => OBJS.some(b => b.type === 'bramble' && b !== o && b.state === 'present' && Math.hypot(b.x - o.x, b.y - o.y) < b.r * .8);
+const shelters = b => OBJS.some(o => o.type === 'sapling' && o.state === 'present' && Math.hypot(b.x - o.x, b.y - o.y) < b.r * .8);
+function dispName(o){ const d = DEF[o.type]; if (o.state === 'cutback') return o.type === 'nettle' ? 'Nettle tops to carry back' : `Cut ${d.label.toLowerCase()} to carry back`; if (!o.identified) return 'Evergreen shrub'; const lab = o.vet ? 'Veteran ' + d.label.replace(' standard', '').toLowerCase() : o.big ? 'Fallen veteran' : d.label; return o.name ? `${o.name} (${lab.toLowerCase()})` : lab; }
+function haloStatus(v){ const d = DEF.veteran; const comp = OBJS.filter(o => DEF[o.type].inv && DEF[o.type].shrub && Math.hypot(o.x - v.x, o.y - v.y) < d.halo); const done = comp.filter(o => o.state !== 'present').length; return {total:comp.length, done}; }
+
+// ===================== light =====================
+const CELL = 20, COLS = W / CELL, ROWS = H / CELL;
+let LIGHT = new Float32Array(COLS * ROWS), L0 = null;
+const SEASON_SHADE = {Spring:.6, Summer:1, Autumn:.8, Winter:.15};
+function shadeOf(o, seasonal){ const d = DEF[o.type]; if (o.state === 'gone') return 0;
+  const k = seasonal && !d.ever ? (d.canopy ? SEASON_SHADE[SEASON] : SEASON === 'Winter' ? .3 : SEASON === 'Spring' ? .75 : 1) : 1;
+  if (d.canopy) return isCanopyNow(o) ? d.shade * k : 0;
+  if (o.type === 'hazel') return o.state === 'coppiced' ? .05 : d.shade * k;
+  if (d.shrub) return o.state === 'present' ? d.shade * k : 0;
+  if (o.state === 'cut' || o.state === 'cutback') return 0;
+  if (o.type === 'nettle' && SEASON === 'Winter' && seasonal) return 0;
+  return (d.shade || 0) * k; }
+const radiusOf = o => DEF[o.type].canopy ? DEF[o.type].crown : o.r;
+function computeLight(seasonal){
+  const L = new Float32Array(COLS * ROWS).fill(1);
+  for (const o of OBJS){ const s = shadeOf(o, seasonal); if (!s) continue; const R = radiusOf(o);
+    const c0 = Math.max(0, Math.floor((o.x - R * 1.15) / CELL)), c1 = Math.min(COLS - 1, Math.floor((o.x + R * 1.15) / CELL));
+    const r0 = Math.max(0, Math.floor((o.y - R * 1.15) / CELL)), r1 = Math.min(ROWS - 1, Math.floor((o.y + R * 1.15) / CELL));
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++){ const d = Math.hypot((c + .5) * CELL - o.x, (r + .5) * CELL - o.y) / R; const f = d < .7 ? 1 : d > 1.15 ? 0 : 1 - (d - .7) / .45; if (f > 0) L[r * COLS + c] *= 1 - s * f; } }
+  return L;
+}
+const cellIdx = (x, y) => Math.min(ROWS - 1, Math.max(0, Math.floor(y / CELL))) * COLS + Math.min(COLS - 1, Math.max(0, Math.floor(x / CELL)));
+const lightAt = (x, y) => LIGHT[cellIdx(x, y)];
+function zoneLight(z, L){ let s = 0, n = 0, ok = 0; for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++){ const x = (c + .5) * CELL, y = (r + .5) * CELL; if (!inRect(x, y, z)) continue; const v = L[r * COLS + c]; s += v; n++; if (v >= .3) ok++; } return {mean:s / n, ok:ok / n}; }
+let shadeLayer = null, lightLayer = null, floraLayer = null;
+// ---- woodland flowers: grow season by season where light reaches the floor ----
+let FLORA = new Float32Array(COLS * ROWS);
+const isFloor = (x, y) => (OUTLINE ? inPlay(x, y) : y < 948) && !onRide(x, y) && !onTrack(x, y) && !inRect(x, y, MEET) && (!BROOK.length || distToBrook(x, y) > 20);
+const brambleOver = (x, y) => OBJS.some(b => DEF[b.type].smother && b.state === 'present' && Math.hypot(b.x - x, b.y - y) < b.r * .95);
+function initFlora(){
+  if (INIT.flora && INIT.flora.length === COLS * ROWS){ for (let i = 0; i < COLS * ROWS; i++) FLORA[i] = (INIT.flora.charCodeAt(i) - 48) / 9; }
+  else { const r = rng(511); for (let i = 0; i < COLS * ROWS; i++){ const x = (i % COLS + .5) * CELL, y = ((i / COLS | 0) + .5) * CELL; if (!isFloor(x, y)){ FLORA[i] = 0; continue; } const l = LIGHT[i]; FLORA[i] = brambleOver(x, y) || l < .3 ? 0 : r() < (l > .55 ? .035 : .015) * FLORASEED ? .2 + r() * .25 : 0; } }
+  const n = Math.min(8, INIT.seasons || 0);
+  for (let k = 0; k < n; k++){ const F = FLORA.slice();
+    for (let i = 0; i < COLS * ROWS; i++){ const c = i % COLS, rr = i / COLS | 0, x = (c + .5) * CELL, y = (rr + .5) * CELL; if (!isFloor(x, y)){ FLORA[i] = 0; continue; }
+      const l = LIGHT[i]; let f = F[i];
+      if (brambleOver(x, y)) f -= .3;
+      else if (l >= .35){ let nb = 0; for (const [dc, dr] of [[1,0],[-1,0],[0,1],[0,-1]]){ const cc = c + dc, r2 = rr + dr; if (cc >= 0 && r2 >= 0 && cc < COLS && r2 < ROWS) nb = Math.max(nb, F[r2 * COLS + cc]); }
+        f += (f + nb > .08 ? .06 + .3 * nb : .003) * Math.min(1, l); }
+      else if (l < .2) f -= .08;
+      FLORA[i] = Math.max(0, Math.min(1, f)); } }
+  floraLayer = null; }
+const encodeFlora = () => Array.from(FLORA, v => String.fromCharCode(48 + Math.round(v * 9))).join('');
+function floraMean(F){ let s = 0, n = 0; for (let i = 0; i < COLS * ROWS; i++){ const x = (i % COLS + .5) * CELL, y = ((i / COLS | 0) + .5) * CELL; if (!isFloor(x, y)) continue; s += F[i]; n++; } return n ? s / n : 0; }
+function floorLight(L){ let s = 0, n = 0; for (let i = 0; i < COLS * ROWS; i++){ const x = (i % COLS + .5) * CELL, y = ((i / COLS | 0) + .5) * CELL; if (!isFloor(x, y)) continue; s += L[i]; n++; } return n ? s / n : 0; }
+function buildFloraLayer(){ const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); const r = rng(303);
+  if (SEASON === 'Winter') return c;                                   // died back below ground
+  const SP = [['#7A7FE0','#5D62C8'], ['#F4F2EA','#DCDACE'], ['#F2DC6A','#E2C447'], ['#EBDDF0','#C9B6D6']];
+  const drift = (c, rr) => { const h = Math.imul((c / 4 | 0) * 73856093 ^ (rr / 3 | 0) * 19349663, 2654435761) >>> 0; return h % 10 < 5 ? 0 : h % 10 < 7 ? 1 : h % 10 < 9 ? 2 : 3; };
+  const leafCol = SEASON === 'Autumn' ? 'rgba(150,120,50,.5)' : SEASON === 'Summer' ? 'rgba(60,110,40,.7)' : 'rgba(70,120,45,.55)';
+  for (let i = 0; i < COLS * ROWS; i++){ const f = FLORA[i]; if (f < .06) continue; const cc = i % COLS, rr = i / COLS | 0, x0 = cc * CELL, y0 = rr * CELL;
+    const clumps = f < .3 ? 1 : f < .6 ? 2 : 3;
+    for (let k = 0; k < clumps; k++){ const cx = x0 - 4 + r() * (CELL + 8), cy = y0 - 4 + r() * (CELL + 8), n = 3 + Math.round(f * 5);
+      const sp = SP[drift(Math.round((cx + (r() - .5) * 70) / CELL), Math.round((cy + (r() - .5) * 60) / CELL))];
+      if (SEASON === 'Autumn'){ if (r() < .5) blob(g, cx, cy, 4, 3, r() * 3, leafCol); continue; }   // yellowing, dying back
+      blob(g, cx, cy, SEASON === 'Summer' ? 7 : 6, SEASON === 'Summer' ? 5 : 4.5, r() * 3, leafCol);
+      const fl = SEASON === 'Spring' ? n : (r() < .25 ? 2 : 0);                                      // summer: mostly leaves, a few late flowers
+      for (let m = 0; m < fl; m++){ const a = r() * 6.28, d = r() * 5; blob(g, cx + Math.cos(a) * d, cy + Math.sin(a) * d, 1.9, 1.9, 0, m % 3 ? sp[0] : sp[1]); } } }
+  return c; }
+function floraWord(f){ const w = f < .04 ? 'no woodland flowers yet' : f < .25 ? 'a few woodland flowers' : f < .55 ? 'patches of bluebell, wood anemone and primrose' : 'a carpet of woodland flowers'; return f < .04 ? w : w + ({Spring:', in full flower', Summer:', mostly in leaf now', Autumn:', dying back for the year', Winter:', dormant underground until spring'})[SEASON]; }
+let DLIGHT = null;
+let SCRUB = 0;
+function scrubCover(){ let n = 0, c = 0; for (let i = 0; i < COLS * ROWS; i += 3){ const x = (i % COLS + .5) * CELL, y = ((i / COLS | 0) + .5) * CELL; if (!isFloor(x, y)) continue; n++; if (brambleOver(x, y)) c++; } return n ? c / n : 0; }
+function refreshLight(){ LIGHT = computeLight(); DLIGHT = computeLight(true); if (OBJS.length) SCRUB = scrubCover(); shadeLayer = null; lightLayer = null; if (OBJS.length) buildCost(); }
+
+// ===================== volunteers =====================
+const CREW = [
+  {name:'Pat', role:'Retired forester', saw:3, craft:2, id:2, carry:1, col:'#E9C73A'},
+  {name:'Priya', role:'Botany student', saw:1, craft:1, id:3, carry:1, col:'#6CC3E0'},
+  {name:'Dave', role:'Strong, keen', saw:2, craft:1, id:1, carry:2, col:'#E08A4A'},
+  {name:'Gwen', role:'Hedge layer', saw:2, craft:3, id:2, carry:1, col:'#B58AE0'},
+  {name:'Ade', role:'All-rounder', saw:2, craft:2, id:2, carry:1, col:'#7FD28A'},
+  {name:'Sam', role:'First work party', saw:1, craft:1, id:1, carry:1, col:'#F07FA8'},
+];
+let PLACE = 'Hollow Copse';
+// ---- cards: each place is a small description; this engine lays it out ----
+let MEETLABEL = 'Meet point', STRIP = null, RIDENAMES = [], FLORASEED = 1, CARD = null;
+// The compartment's real outline. Ground beyond it is drawn (neighbours, fields, the lane) but out of bounds.
+let OUTLINE = null, NEIGH = [], FIELDS = [], FIELDLABELS = [], GATES = [], LANES = [], WOODEDGE = [], NORTH = 0;
+function inPoly(x, y, P){ let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++){ const [xi, yi] = P[i], [xj, yj] = P[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; }
+const inPlay = (x, y) => !OUTLINE || inPoly(x, y, OUTLINE) || inRect(x, y, MEET);
+function beyondName(x, y){ for (const f of FIELDS) if (inPoly(x, y, f)){ let b = null, d = 1e9; for (const l of FIELDLABELS){ const dd = Math.hypot(l.at[0] - x, l.at[1] - y); if (dd < d){ d = dd; b = l.n; } } return b || 'farmland outside the wood'; }
+  let b = null, d = 1e9; for (const n of NEIGH){ const dd = Math.hypot(n.at[0] - x, n.at[1] - y); if (dd < d){ d = dd; b = n.n; } } return b || 'the next compartment'; }
+function applyCard(c){
+  CARD = c; PLACE = c.place; ZONES = c.zones; ZMAP = Object.fromEntries(ZONES.map(z => [z.id, z]));
+  MEET = c.meet || {x:600, y:815, w:400, h:140}; MO = [MEET.x - 600, MEET.y - 815]; MK = MEET.w / 400;
+  BROOK = []; RIDES = (c.rides || []).map(r => ({w:r.w, pts:catmull(r.pts, r.n || 12)}));
+  FOOTPATH = []; TRACKS = (c.tracks || []).map(t => catmull(t.pts, t.n || 10)); BRIDGES = [];
+  LAYOUT = c.layout; CANOPY_PLAN = c.canopy; DROP = dropFor();
+  SETT_R = c.settR || 150; RUNS = (c.runs || []).map(P => catmull(P, 8));
+  OUTLINE = c.outline || null; NEIGH = c.neigh || []; FIELDS = c.fields || []; FIELDLABELS = c.fieldLabels || []; GATES = c.gates || []; LANES = c.lane || []; WOODEDGE = c.woodEdge || []; NORTH = c.north || 0;
+  MEETLABEL = c.meetLabel || 'Meet point'; STRIP = c.strip || null; RIDENAMES = c.names || []; FLORASEED = c.floraSeed || 1;
+  COST = null; BG = null;
+  document.title = `${PLACE} work party · Renature`;
+  document.querySelector('.brand b').textContent = `${PLACE} work party`;
+  const intro = document.getElementById('intro');
+  intro.querySelector('h2').textContent = c.h2 || `A work day at ${PLACE}`;
+  document.getElementById('introLead').textContent = c.lead || '';
+  document.getElementById('introTail').textContent = c.tail || '';
+}
+let SEASON = 'Autumn';
+const GROWING = () => SEASON === 'Spring' || SEASON === 'Summer';
+const SEASON_EVENTS = [];
+const EMBED = new URLSearchParams(location.search).has('embed');
+const LOCK = new Set();
+const EXTRA = [["Jo", "Dog walker turned regular", 1, 1, 2, 1, "#5FB8A8"], ["Mike", "Retired engineer", 2, 1, 1, 2, "#C96A5A"], ["Helen", "Wildflower enthusiast", 1, 2, 3, 1, "#E6DCA8"], ["Tom", "Sixth-former", 1, 1, 1, 2, "#7FC6E0"], ["Ruth", "Parish councillor", 1, 2, 2, 1, "#D9A07A"], ["Kwame", "Tree surgeon", 3, 2, 1, 2, "#9FD27A"], ["Lily", "Ecology graduate", 1, 1, 3, 1, "#F2C23A"], ["Ben", "Keen walker", 2, 1, 1, 2, "#B0B4B8"], ["Anita", "Allotment holder", 1, 2, 2, 1, "#E79BC0"], ["Rob", "Ex-army", 2, 1, 1, 2, "#8FA35A"], ["Grace", "Birdwatcher", 1, 1, 3, 1, "#9FC4E8"], ["Sid", "Retired farmer", 3, 2, 2, 2, "#C9A15A"], ["Maya", "A-level biology student", 1, 1, 2, 1, "#D7A0F0"], ["Owen", "Carpenter", 2, 3, 1, 1, "#E0B07A"], ["Fran", "Forest school leader", 1, 2, 2, 1, "#7FD6B5"], ["Callum", "Gap-year student", 2, 1, 1, 2, "#F08A6A"], ["Doreen", "Women’s Institute", 1, 2, 2, 1, "#E8C8A8"], ["Ian", "Bat group member", 1, 1, 3, 1, "#8A9AD0"], ["Nadia", "Nurse, weekends off", 1, 1, 1, 1, "#F0A0A0"], ["Lewis", "Landscaper", 3, 1, 1, 2, "#A6C25A"], ["Pippa", "Botanical artist", 1, 2, 3, 1, "#C0D890"], ["George", "Retired teacher", 1, 2, 2, 1, "#B8A8D8"], ["Asha", "Conservation trainee", 2, 2, 2, 1, "#5FC8C0"], ["Will", "Scout leader", 2, 2, 1, 2, "#D0B050"]];
+let CREW_ACTIVE = CREW.slice();
+function setCrew(n, staff, from){ const ALL = CREW.concat(EXTRA.map(([name, role, saw, craft, id, carry, col]) => ({name, role, saw, craft, id, carry, col}))), k = (from || 0) % ALL.length, out = [];
+  for (let i = 0; out.length < Math.min(n, 12) && i < ALL.length; i++) out.push(ALL[(k + i) % ALL.length]);
+  for (let i = 0; i < (staff || 0); i++) out.push({name: i ? 'Assistant ranger ' + (i + 1) : 'Assistant ranger', role:'Staff', saw:3, craft:2, id:2, carry:2, col:'#D3E63A'});
+  CREW_ACTIVE = out.length ? out : CREW.slice(0, 1); }
+let UNITS = [];
+function makeUnits(){
+  UNITS = CREW_ACTIVE.map((c, i) => ({...c, idx:i, x:mx(655 + (i % 5) * 72), y:my(850 + Math.floor(i / 5) * 40), stamina:100, path:[], task:null, queue:[], item:null, carrying:[], sel:false, swing:Math.random()*6, status:'Waiting at the meet point', saved:null}));
+}
+const SKILL = l => [0, 0.7, 1, 1.35][l];
+
+// ===================== state =====================
+let G, BEFORE, F0 = 0;
+let INIT = {gw:58, states:null, flora:null, seasons:0, maxVols:12, tools:['saws','herbicide']};
+const KIT = t => (INIT.tools || []).includes(t);
+const GUARD_COST = 3, HERB_COST = 2;
+function applyStates(){ if (!INIT.states) return;   // older save format: states for the starting objects only
+  for (const [id, st, idf, rr, age] of INIT.states){ const o = OBJS[id]; if (!o) continue; o.state = st === 'bagged' ? 'gone' : st; o.identified = !!idf || o.identified; o.loads = []; if (rr) o.r = rr; o.age = age || 0; } }
+function packObjs(){ return OBJS.filter(o => o.state !== 'gone' && o.state !== 'removed' && !(o.state === 'bagged' && !o.loads.length) && !(DEF[o.type].cat === 'litter' && o.state === 'bagged'))
+  .map(o => ({t:o.type, x:Math.round(o.x), y:Math.round(o.y), s:o.state === 'bagged' ? 'present' : o.state, i:o.identified ? 1 : 0, r:Math.round(o.r), a:o.age || 0, n:o.name || null, v:o.vet ? 1 : 0, vy:o.vy || 0, g:o.yrs || 0, b:o.big ? 1 : 0})); }
+function unpackObjs(list){ OBJS = list.map((q, i) => { const o = newObj(q.t, q.x, q.y, q.n, i); o.state = q.s; o.identified = !!q.i || o.identified; o.r = q.r || o.r; o.age = q.a || 0; o.vet = !!q.v; o.vy = q.vy || 0; o.yrs = q.g || 0; o.big = !!q.b; return o; }); }
+function spot(minLight, near){ for (let k = 0; k < 60; k++){ let x, y;
+    if (near === 'edge' && OUTLINE){ const i = Math.floor(Math.random() * OUTLINE.length), [ax, ay] = OUTLINE[i], [bx, by] = OUTLINE[(i + 1) % OUTLINE.length], t = Math.random(), cx = OUTLINE.reduce((a, p) => a + p[0], 0) / OUTLINE.length, cy = OUTLINE.reduce((a, p) => a + p[1], 0) / OUTLINE.length;
+      x = ax + (bx - ax) * t; y = ay + (by - ay) * t; const dd = Math.hypot(cx - x, cy - y) || 1, k = 50 + Math.random() * 80; x += (cx - x) / dd * k; y += (cy - y) / dd * k; }
+    else if (near === 'edge'){ const e = Math.floor(Math.random() * 3); x = e === 0 ? 40 + Math.random() * 60 : e === 1 ? W - 100 + Math.random() * 60 : 60 + Math.random() * (W - 120); y = e === 2 ? 40 + Math.random() * 60 : 60 + Math.random() * 820; }
+    else if (near && near.x != null){ const a = Math.random() * 6.28, d = 60 + Math.random() * 120; x = near.x + Math.cos(a) * d; y = near.y + Math.sin(a) * d; }
+    else { x = 40 + Math.random() * (W - 80); y = 40 + Math.random() * 860; }
+    if (x < 30 || x > W - 30 || y < 30 || y > 970 || !isFloor(x, y)) continue;
+    if (near === 'disturbed' && !(onRide(x, y) || onTrack(x, y) || Math.hypot(x - MEET.x - MEET.w / 2, y - MEET.y - MEET.h / 2) < 260 || OBJS.some(o => o.type === 'deadwood' && Math.hypot(o.x - x, o.y - y) < 120))) continue;
+    if (LIGHT[cellIdx(x, y)] < minLight) continue;
+    if (OBJS.some(o => o.state !== 'gone' && (DEF[o.type].canopy ? Math.hypot(o.x - x, o.y - y) < DEF[o.type].trunk + 26 : Math.hypot(o.x - x, o.y - y) < o.r * .7 + 26))) continue;
+    if (onRide(x, y) || onTrack(x, y)) continue;
+    return [x, y]; } return null; }
+function spawn(type, at, extra){ if (!at) return null; const o = newObj(type, at[0], at[1], null, OBJS.length); Object.assign(o, extra || {}); OBJS.push(o); return o; }
+const count = t => OBJS.filter(o => o.type === t && o.state !== 'gone').length;
+const DEATHS = ['was blown over in a winter storm', 'came down after years of honey fungus at the roots', 'collapsed under its own weight', 'lost its crown and fell'];
+// Advance the wood through the seasons since the last work day here. Seasons run Autumn → Winter → Spring → Summer.
+function advanceSeasons(n){
+  const ORDER = ['Autumn', 'Winter', 'Spring', 'Summer'], end = ORDER.indexOf(SEASON);
+  const ev = {browsed:0, young:0, standard:0, vet:[], fell:[], ash:0, bramble:0, dogwood:0, nettle:0, sapling:0, creep:0, spread:0, litter:[]};
+  const invType = LAYOUT.some(q => q[0] === 'rhodo' || q[0] === 'rhodoSmall') ? 'rhodoSmall' : 'laurelSmall';
+  for (let k = n; k >= 1; k--){ const S = ORDER[((end - k + 1) % 4 + 4) % 4], grow = S === 'Spring' || S === 'Summer';
+    refreshLight();
+    for (const o of OBJS.slice()){ if (o.state === 'gone') continue; const d = DEF[o.type]; o.age = (o.age || 0) + 1; o.yrs = (o.yrs || 0) + 1;
+      if (d.inv && o.state === 'treated') { o.state = 'gone'; continue; }                                        // treated stumps rot away
+      if (o.state === 'stump' && o.age >= 4){ o.state = 'present'; o.r = Math.round(d.r * .6); }                 // untreated stumps resprout
+      if (o.state === 'cut' && d.nshrub && o.age >= 6){ o.state = 'present'; o.r = Math.round(d.r * .6); }     // native shrubs regrow from the stump
+      // bramble and dogwood come back from the roots every spring; nettles the season after cutting
+      if (o.state === 'cutback' && ((o.type === 'bramble' || o.type === 'dogwood') ? S === 'Spring' : o.age >= (d.regrow || 3))){ o.state = 'present'; o.r = Math.round(d.r * .55); }
+      if (o.state === 'coppiced' && o.age >= 24) o.state = 'present';
+      if (o.state === 'present' && d.smother && o.type !== 'nettle' && grow){ const bright = LIGHT[cellIdx(o.x, o.y)] > .6; o.r = Math.min(Math.round(d.r * (o.type === 'bramble' ? (bright ? 2.8 : 1.8) : 1.6)), Math.round(o.r * (o.type === 'bramble' ? (bright ? 1.25 : 1.1) : 1.08))); }
+      else if (o.state === 'present' && !d.canopy && o.r < d.r && grow) o.r = Math.min(d.r, Math.round(o.r * 1.12) + 1);
+      // invasive seedlings mature and set seed of their own
+      if ((o.type === 'rhodoSmall' || o.type === 'laurelSmall') && o.state === 'present' && o.yrs >= 12){ o.type = o.type === 'rhodoSmall' ? 'rhodo' : 'laurel'; o.r = Math.round(DEF[o.type].r * .7); }
+      if ((o.type === 'rhodo' || o.type === 'laurel') && o.state === 'present' && Math.random() < .12){ if (spawn(o.type === 'rhodo' ? 'rhodoSmall' : 'laurelSmall', spot(.1, o), {yrs:0})) ev.spread++; }
+      // trees: sapling → young tree → standard → veteran
+      if (o.type === 'sapling' && (o.state === 'present' || o.state === 'guarded')){
+        if (o.state === 'present' && !inBramble(o) && Math.random() < .1){ o.yrs = Math.max(0, o.yrs - 4); ev.browsed++; }
+        else if (o.yrs >= 10){ o.type = 'young'; o.state = 'present'; o.r = DEF.young.r; o.yrs = 0; o.sprite = o.crownSprite = null; ev.young++; } }
+      else if (o.type === 'young' && o.yrs >= 20 && !OBJS.some(q => q !== o && isCanopyNow(q) && q.type !== 'young' && Math.hypot(q.x - o.x, q.y - o.y) < DEF[q.type].crown * .7)){ o.type = 'oak'; o.yrs = 0; ev.standard++; }
+      else if ((o.type === 'oak' || o.type === 'beech') && !o.vet && o.yrs >= 40){ o.vet = true; o.vy = 0; ev.vet.push(DEF[o.type].label.replace(' standard', '').toLowerCase()); }
+      if ((o.type === 'veteran' || o.vet) && o.state === 'present'){ o.vy = (o.vy || 0) + 1;
+        const p = Math.min(.15, .015 + .01 * o.vy / 4) / 4 * (S === 'Winter' ? 2 : .67);
+        if (Math.random() < p){ const nm = o.name || (o.type === 'veteran' ? 'A veteran oak' : 'A veteran ' + DEF[o.type].label.replace(' standard', '').toLowerCase());
+          ev.fell.push(`${nm} ${S === 'Winter' ? DEATHS[0] : DEATHS[1 + Math.floor(Math.random() * 3)]}`);
+          o.state = 'gone'; const dw = spawn('deadwood', [o.x + 30, o.y + 10], {r:66, identified:true}); if (dw) dw.big = true; } }
+      if (o.type === 'ash' && o.state === 'present' && Math.random() < .05){ o.state = 'felled'; ev.ash++; }
+    }
+    // new growth arriving in the light
+    const P = grow ? 1 : .35;
+    let open = 0, nf = 0; for (let i = 0; i < COLS * ROWS; i += 7){ const x = (i % COLS + .5) * CELL, y = ((i / COLS | 0) + .5) * CELL; if (!isFloor(x, y)) continue; nf++; if (LIGHT[i] > .7) open++; } open = nf ? open / nf : 0;
+    for (let t = 0; t < 1 + Math.round(open * 3); t++) if (count('bramble') < 30 && Math.random() < (.4 + .5 * open) * P){ if (spawn('bramble', spot(.5), {r:26})) ev.bramble++; }
+    if (count('dogwood') < 10 && Math.random() < .18 * P){ if (spawn('dogwood', spot(.5), {r:20})) ev.dogwood++; }
+    if (count('nettle') < 10 && Math.random() < .22 * P){ if (spawn('nettle', spot(.35, 'disturbed'), {r:22})) ev.nettle++; }
+    if (count('sapling') < 18 && Math.random() < .3 * P){ if (spawn('sapling', spot(.55), {yrs:0})) ev.sapling++; }
+    // litter: dumped more often where the wood looks neglected and where people care less
+    const litRate = ({Poor:.6, Moderate:.3, Good:.1})[INIT.cond || 'Poor'] * Math.max(.3, 2.2 - 2 * (INIT.gw ?? 58) / 100);
+    if (OBJS.filter(o => DEF[o.type].cat === 'litter' && o.state === 'present').length < 9){ let n = Math.random() < litRate ? 1 : 0; if (Math.random() < litRate * .4) n++;
+      for (let m = 0; m < n; m++){ const roll = Math.random(), t = roll < .3 ? 'cans' : roll < .58 ? 'bags' : roll < .7 ? 'tyre' : roll < .8 ? 'pots' : roll < .9 ? 'rubble' : 'mattress';
+        if (spawn(t, spot(0, 'disturbed'))) ev.litter.push(DEF[t].label.toLowerCase()); } }
+    // invasives creep in slowly from neighbouring compartments that still have them
+    if ((INIT.creep || 0) > 0 && Math.random() < .045 * INIT.creep){ if (spawn(invType, spot(.1, 'edge'), {yrs:0})) ev.creep++; }
+  }
+  refreshLight();
+  const E = [];
+  ev.fell.forEach(f => E.push([`${f}. It lies on the floor now as deadwood, and its gap lets the light in.`, 'info']));
+  if (ev.ash) E.push([`${ev.ash === 1 ? 'A dying ash' : ev.ash + ' dying ash'} came down on ${ev.ash === 1 ? 'its' : 'their'} own since your last visit.`, 'bad']);
+  ev.vet.forEach(v => E.push([`An old ${v} here now counts as a veteran tree: rot holes, dead limbs and all.`, 'good']));
+  if (ev.young) E.push([`${ev.young} oak sapling${ev.young > 1 ? 's have' : ' has'} grown into ${ev.young > 1 ? 'young trees' : 'a young tree'}, safe above deer height.`, 'good']);
+  if (ev.standard) E.push([`${ev.standard} young oak${ev.standard > 1 ? 's have' : ' has'} reached the canopy as ${ev.standard > 1 ? 'standards' : 'a standard'}.`, 'good']);
+  if (ev.browsed) E.push([`Deer browsed ${ev.browsed} unguarded sapling${ev.browsed > 1 ? 's' : ''} back to the ground.`, 'bad']);
+  if (ev.sapling) E.push([`${ev.sapling} new oak seedling${ev.sapling > 1 ? 's have' : ' has'} come up in the light gaps.`, 'good']);
+  const sc = [ev.bramble && `${ev.bramble} bramble`, ev.dogwood && `${ev.dogwood} dogwood`, ev.nettle && `${ev.nettle} nettle`].filter(Boolean);
+  if (sc.length) E.push([`New patches have moved into the open ground: ${sc.join(', ')}.`, 'info']);
+  if (ev.litter.length) E.push([`Rubbish has been dumped since your last visit: ${[...new Set(ev.litter)].join(', ')}. ${(INIT.gw ?? 58) < 45 ? 'Local feeling about the wood is low, and it shows.' : INIT.cond === 'Good' ? '' : 'A neglected-looking wood attracts more of it.'}`, 'bad']);
+  if (ev.creep) E.push([`${ev.creep} ${invType === 'rhodoSmall' ? 'rhododendron' : 'laurel'} seedling${ev.creep > 1 ? 's have' : ' has'} crept in from the neighbouring compartment.`, 'bad']);
+  if (ev.spread) E.push([`Invasive shrubs left standing here have seeded ${ev.spread} new seedling${ev.spread > 1 ? 's' : ''}.`, 'bad']);
+  SEASON_EVENTS.length = 0; SEASON_EVENTS.push(...E);
+}
+let PICK = 6;
+function showBrief(){
+  const e = estimateWork(), max = Math.max(PARTY_MIN_T, INIT.maxVols || 12), rec = Math.min(max, Math.max(PARTY_MIN_T, e.need || PARTY_MIN_T));
+  PICK = Math.max(PARTY_MIN_T, Math.min(max, PICK || rec));
+  const verdict = !e.total ? 'Nothing urgent here. A small party could tidy up, or save your volunteers for somewhere busier.' : e.need > max ? `A heavy day. Even ${max} volunteers won't get through it all; plan a second visit next season.` : e.need <= 4 ? 'A light day: a small party will cover it.' : e.need <= 8 ? 'A full day for a medium-sized party.' : 'A big day: bring as many as you can spare.';
+  document.getElementById('briefsheet').innerHTML = `<p class="eyebrow">Ranger's site visit · ${SEASON}</p><h2>${PLACE}: what needs doing</h2>
+    ${SEASON_EVENTS.length ? `<p class="note">${SEASON_EVENTS.slice(0, 3).map(x => x[0]).join(' ')}</p>` : ''}
+    ${kitNotes().map(n => `<p class="note">${n}</p>`).join('')}
+    ${e.rows.length ? `<ul class="bjobs">${e.rows.map(([l, n]) => `<li><span>${l}</span><em>${n}</em></li>`).join('')}</ul>` : '<p>No set jobs today.</p>'}
+    <p class="verdict">${verdict} Roughly <b>${Math.round(e.total / 60 * 10) / 10} volunteer-hours</b> of work${e.total ? `; I'd bring <b>about ${rec}</b>` : ''}.</p>
+    <div class="bpick"><span>Bring</span><button class="btn sz" type="button" data-pk="-1" ${PICK <= PARTY_MIN_T ? 'disabled' : ''} aria-label="Fewer">−</button><b class="n">${PICK}</b><button class="btn sz" type="button" data-pk="1" ${PICK >= max ? 'disabled' : ''} aria-label="More">+</button><span class="note-s">of ${max} free · at least ${PARTY_MIN_T}</span></div>
+    <dl class="best"><dt>Expect to finish</dt><dd>${finishTime(e.total, PICK)}</dd></dl>
+    <p class="note">New to work days? <b>Help</b>, at the top, explains the controls.</p>
+    <div class="row"><button class="btn" type="button" id="peek">Look around first</button><button class="btn primary" type="button" id="gobrief">Start with ${PICK} volunteers</button></div>`;
+  document.getElementById('brief').hidden = false; document.getElementById('peekbar').hidden = true; G.peek = false; G.running = false;
+  document.querySelectorAll('#briefsheet [data-pk]').forEach(b => b.onclick = () => { PICK = Math.max(PARTY_MIN_T, Math.min(max, PICK + (+b.dataset.pk))); showBrief(); });
+  document.getElementById('peek').onclick = () => { document.getElementById('brief').hidden = true; document.getElementById('peekbar').hidden = false; G.peek = true; };
+  document.getElementById('gobrief').onclick = () => { setCrew(PICK, INIT.staff || 0, INIT.crewFrom || 0); makeUnits(); G.party = UNITS.length - (INIT.staff || 0);
+    document.getElementById('brief').hidden = true; document.getElementById('peekbar').hidden = true; G.peek = false; G.running = true;
+    log(`${UNITS.length} on the crew today: ${UNITS.map(u => u.name).join(', ')}.`, 'info'); renderSide(true); };
+}
+document.getElementById('backbrief').onclick = () => { closeMenu(); showBrief(); };
+function reset(){
+  if (INIT.objs) unpackObjs(INIT.objs); else { makeObjs(); applyStates(); }
+  SEASON_EVENTS.length = 0; if (INIT.seasons) advanceSeasons(Math.min(16, INIT.seasons)); OBJS.forEach((o, i) => { o.id = i; o.st0 = o.state; o.sprite = o.crownSprite = null; }); makeUnits(); refreshLight(); L0 = LIGHT.slice(); initFlora(); F0 = floraMean(FLORA); BG = null; if (typeof buildBG === 'function' && L0) buildBG();
+  G = {delivered:0, announcedDone:false, early:false, t:600, speed:1, running:false, over:false, gw:INIT.gw, gw0:INIT.gw, bank:{burnt:0, poles:0, peasticks:0, firewood:0, greenery:0, woodchip:0, nettles:0}, skipCost:0, skipItems:0, guards:0, treated:0, harvested:[], cutback:0, nesting:0,
+       mistakes:[], removedDeadwood:0, teaUntil:0, events:{}, log:[]};
+  BEFORE = assessTile();
+  OBJS.forEach(o => o.sprite = null);
+  document.getElementById('report').hidden = true; document.getElementById('repmin').hidden = true;
+  document.getElementById('intro').hidden = true;
+  document.getElementById('toast').className = 'toast'; closeMenu(); log(`${SEASON} work day. Crew signed in, tea urn on, tools out of the trailer.`, 'info'); SEASON_EVENTS.forEach(([m, c]) => log('Since your last visit: ' + m, c));
+  UNITS = []; PICK = 0; CAM.z = 1; CAM.cx = 0; CAM.cy = 0; clampCam(); document.getElementById('brief').hidden = true; document.getElementById('peekbar').hidden = true;
+  showBrief();
+  setSpeed(1); renderSide(true);
+}
+
+// ===================== tasks =====================
+const NEEDS = {guard:'guard', treat:'herbicide'};
+function busy(u){ return u.task && !(u.task.kind === 'move' && !u.path.length); }
+function giveTask(u, task){ if (busy(u)){ u.queue.push(task); return 'queued'; } u.task = task; u.saved = null; plan(u); return 'now'; }
+function assign(units, kind, o){
+  if (kind === 'fell') units = units.filter(u => u.saw >= 2);
+  if (!units.length){ toast(kind === 'fell' ? 'Nobody selected is confident felling. Try Pat, Dave, Gwen or Ade.' : 'No volunteers available.', true); return; }
+  let q = 0; units.forEach(u => { if (giveTask(u, {kind, o, phase:null, idChecked:false}) === 'queued') q++; });
+  if (q) toast(`${q === units.length ? (units.length === 1 ? units[0].name + ' will' : 'They will') : q + ' of them will'} finish the current job first.`);
+  closeMenu();
+}
+function approach(u, o){
+  const a = (u.idx / 6) * Math.PI * 2 + 0.4, rr = o.r + 14;
+  const z = ZMAP[o.zone]; let x = o.x + Math.cos(a) * rr, y = o.y + Math.sin(a) * rr;
+  if (z){ x = Math.max(z.x + 6, Math.min(z.x + z.w - 6, x)); y = Math.max(z.y + 6, Math.min(z.y + z.h - 6, y)); }
+  return [x, y];
+}
+function plan(u){
+  const t = u.task; if (!t) return;
+  if (t.kind === 'move'){ u.path = pathTo(u, t.pt[0], t.pt[1]); t.phase = 'move'; return; }
+  if (t.kind === 'tea'){ u.path = pathTo(u, mx(760 + (u.idx % 3) * 40), my(862 + Math.floor(u.idx / 3) * 30)); t.phase = 'tea'; return; }
+  if (t.kind === 'rest'){ u.path = pathTo(u, mx(700 + (u.idx % 4) * 30), my(900 + Math.floor(u.idx / 4) * 22)); t.phase = 'rest'; return; }
+  const need = NEEDS[t.kind];
+  if (need && u.item !== need && Math.hypot(u.x - DROP.item[0], u.y - DROP.item[1]) < 170){ u.item = need; }
+  if (need && u.item !== need){ u.path = pathTo(u, DROP.item[0], DROP.item[1]); t.phase = 'fetch'; return; }
+  if (t.kind === 'haul'){ u.path = pathTo(u, ...approach(u, t.o)); t.phase = 'gohaul'; return; }
+  u.path = pathTo(u, ...approach(u, t.o)); t.phase = 'go';
+}
+function workNeed(kind, o){
+  const d = DEF[o.type];
+  if (kind === 'treat') return 6;
+  if (kind === 'cutback') return Math.round(d.work * Math.max(1, o.r / d.r) * (KIT('brushcutter') ? .4 : 1));
+  if (kind === 'firewood') return o.type === 'ash' ? 25 : 12;
+  return d.work;
+}
+function skillFor(u, kind){ if (kind === 'clear' || kind === 'fell' || kind === 'firewood' || kind === 'harvest' || kind === 'cutback') return SKILL(u.saw); if (kind === 'coppice') return SKILL(u.craft); return 1; }
+function startWork(u){
+  const t = u.task, o = t.o, d = DEF[o.type];
+  if (t.kind === 'clear' && d.native && !o.identified && !t.idChecked){
+    t.idChecked = true;
+    const p = [0, 0.25, 0.6, 0.95][u.id];
+    if (Math.random() < p){ o.identified = true; o.sprite = null; u.task = null; u.status = 'Left the holly standing';
+      log(`${u.name} looks closer: it's holly, a native. Left standing.`, 'good'); toast(`${u.name} spotted it was holly and left it.`); return false; }
+  }
+  if (o.need === 0 || o.workKind !== t.kind){ o.work = 0; o.need = workNeed(t.kind, o); o.workKind = t.kind; }
+  t.phase = 'work'; return true;
+}
+function complete(o, kind){
+  const d = DEF[o.type]; o.identified = true; o.need = 0; o.work = 0; o.workKind = null; o.flash = 1; o.age = 0; settCheck(o, kind);
+  if (kind === 'clear'){
+    if (d.native){ o.state = 'cut'; G.mistakes.push('Holly cut by mistake'); log('Holly cut down by mistake.', 'bad'); toast('That was holly: a native shrub has been cut.', true); }
+    else { o.state = 'stump'; o.loads = Array(d.loads).fill('brash'); log(`${d.label} cleared. Stumps need treating; the brash goes on the fire.`, 'good'); }
+  } else if (kind === 'treat'){ G.treated++; o.state = 'treated'; log(`Stumps treated. No regrowth next year.`, 'good'); }
+  else if (kind === 'harvest'){ nestCheck(o); o.state = 'cut'; o.loads = (d.produce || []).slice(); G.harvested.push(d.label); log(`${d.label} cut for produce. One fewer native shrub, but more light on the floor.`, 'info'); }
+  else if (kind === 'cutback'){ o.state = 'cutback'; G.cutback++; if (d.cut) o.loads = o.type === 'nettle' && !GROWING() ? [] : d.cut.slice(); nestCheck(o); const exp = OBJS.filter(p => p.type === 'sapling' && p.state === 'present' && Math.hypot(p.x - o.x, p.y - o.y) < o.r * .8); exp.forEach(p => p.sprite = null);
+    log(`${d.label} cut back${o.type === 'bramble' ? ' and stacked as a dead hedge' : ''}. The flowers beneath can come through${exp.length ? ', but the oak sapling it sheltered is now open to deer' : ''}.`, exp.length ? 'bad' : 'good'); if (exp.length) toast('The sapling that bramble sheltered is exposed now. Guard it?', true); }
+  else if (kind === 'coppice'){ o.state = 'coppiced'; o.loads = ['poles', 'peasticks']; log(`Hazel stool coppiced; brash laid as a dead hedge.`, 'good'); }
+  else if (kind === 'fell'){ o.state = 'felled'; log('Dying ash felled away from the footpath. Decide what to do with the trunk.', 'good'); toast('Ash felled. Tap the trunk: firewood, or leave it as deadwood?'); }
+  else if (kind === 'firewood'){
+    if (o.type === 'ash'){ o.state = 'logged'; o.loads = ['firewood', 'firewood', 'firewood']; }
+    else { o.state = 'removed'; o.loads = ['firewood', 'firewood']; }
+    G.removedDeadwood++; log(`Deadwood cut up for firewood. Money, but less habitat.`, 'bad');
+  } else if (kind === 'pick'){ o.state = 'bagged'; o.loads = ['litter']; }
+  else if (kind === 'guard'){ G.guards++; o.state = 'guarded'; UNITS.forEach(v => { if (v.task && v.task.o === o && v.task.kind === 'guard') v.item = null; }); log(`Tree guard fitted.`, 'good'); }
+  o.sprite = null; refreshLight();
+}
+let SETT_R = 150, RUNS = [];
+const onRun = (x, y) => RUNS.some(P => distToLine(P, x, y) < 10);
+const inBuffer = o => OBJS.some(s => s.type === 'sett' && s !== o && Math.hypot(s.x - o.x, s.y - o.y) < SETT_R);
+function settCheck(o, kind){ if (!['clear','harvest','cutback','fell','coppice','firewood'].includes(kind) || !inBuffer(o)) return;
+  G.mistakes.push('Worked inside the badger sett buffer'); G.gw = Math.max(0, G.gw - 3); log('Work inside the badger sett buffer. That risks disturbing a protected sett, and the neighbours have noticed.', 'bad'); toast('That was inside the badger sett buffer.', true); }
+function nestCheck(o){ if (!GROWING() || o.type === 'nettle') return; G.nesting++; G.gw = Math.max(0, G.gw - 1); log(`${DEF[o.type].label} cut in the bird nesting season. A neighbour walking past is not impressed.`, 'bad'); }
+// Rough size of today's work, in volunteer-minutes, from what still needs doing this morning.
+const PER_VOL = 110;   // productive minutes one volunteer gets through in a day, after walking, carrying and tea
+function estimateWork(){
+  const os = OBJS.filter(o => !LOCK.has(o.zone) && o.st0 === 'present' && !(inBuffer(o) && (DEF[o.type].shrub || DEF[o.type].smother || o.type === 'hazel'))), rows = [];
+  let total = 0; const add = (label, n, mins) => { if (n > 0){ rows.push([label, n]); total += mins; } };
+  const inv = os.filter(o => DEF[o.type].inv && DEF[o.type].shrub);
+  const stumps = OBJS.filter(o => DEF[o.type].inv && o.st0 === 'stump');
+  add('Invasive shrubs to cut', inv.length, inv.reduce((a, o) => a + DEF[o.type].work + DEF[o.type].loads * 4, 0));
+  if (KIT('herbicide')) add('Stumps to treat', inv.length + stumps.length, (inv.length + stumps.length) * 9);
+  const hz = GROWING() ? [] : os.filter(o => o.type === 'hazel').slice(0, 3); add('Hazel to coppice', hz.length, hz.length * (DEF.hazel.work + 8));
+  const ash = KIT('chainsaw') ? os.filter(o => o.type === 'ash') : []; add('Dying ash to make safe', ash.length, ash.length * 50);
+  const sp = os.filter(o => o.type === 'sapling' && !inBramble(o)); add('Saplings to guard', sp.length, sp.length * 12);
+  const sm = os.filter(o => DEF[o.type].smother && !(o.type === 'bramble' && shelters(o)) && (o.type === 'nettle' ? SEASON !== 'Winter' : !GROWING()));
+  add(GROWING() ? 'Nettles to cut back' : 'Bramble and scrub to cut back', sm.length, sm.reduce((a, o) => a + DEF[o.type].work * Math.max(1, o.r / DEF[o.type].r) * (KIT('brushcutter') ? .4 : 1) + 3, 0));
+  const lit = os.filter(o => DEF[o.type].cat === 'litter'); add('Rubbish to clear', lit.length, lit.reduce((a, o) => a + DEF[o.type].work + 6, 0));
+  const need = total ? Math.max(PARTY_MIN_T, Math.ceil(total / PER_VOL)) : 0;
+  return {rows, total:Math.round(total), need};
+}
+const PARTY_MIN_T = 4;
+function kitNotes(){ const os = OBJS.filter(o => o.st0 === 'present' || o.st0 === 'stump'), out = [];
+  if (!KIT('herbicide') && os.some(o => DEF[o.type].inv && DEF[o.type].shrub)) out.push('<b>No herbicide kit yet.</b> You can cut the invasive shrubs today, but without treating the stumps they will resprout within a year. The kit and certificate are in the tool store.');
+  if (!KIT('chainsaw') && os.some(o => o.type === 'ash' && o.state === 'present')) out.push('<b>No chainsaw.</b> The dying ash will have to wait; it may come down on its own.');
+  if (KIT('brushcutter') && os.some(o => DEF[o.type].smother)) out.push('The brushcutter is in the trailer: bramble and scrub go down in less than half the time.');
+  return out; }
+function finishTime(total, n){ if (!total) return 'no set jobs'; const mins = total / (n * PER_VOL) * 270 + 25; const t = 600 + mins; if (t > 900) return `won't finish today (about ${Math.round((t - 600) / 300 * 100)}% of a day's work)`; const h = Math.floor(t / 60), m = Math.round(t % 60 / 5) * 5; return `around ${String(h).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; }
+function computeGoals(){
+  const open = o => !LOCK.has(o.zone), os = OBJS.filter(open), out = [], todo = o => o.st0 === 'present' && !(inBuffer(o) && (DEF[o.type].shrub || DEF[o.type].smother || o.type === 'hazel'));
+  const add = (name, done, total, keep) => { if (total > 0) out.push({name, done:Math.min(done, total), total, pct:Math.round(Math.min(done, total) / total * 100), keep:!!keep}); };
+  const inv = os.filter(o => DEF[o.type].inv && DEF[o.type].shrub && todo(o)), stp = os.filter(o => DEF[o.type].inv && DEF[o.type].shrub && (todo(o) || o.st0 === 'stump'));
+  add('Cut invasive shrubs', inv.filter(o => o.state !== 'present').length, inv.length);
+  if (KIT('herbicide')) add('Treat the stumps', stp.filter(o => o.state === 'treated').length, stp.length);
+  const hz = GROWING() ? [] : os.filter(o => o.type === 'hazel' && todo(o)); add('Coppice hazel (1–3 stools)', hz.filter(o => o.state === 'coppiced').length, Math.min(3, hz.length));
+  const ash = KIT('chainsaw') ? os.filter(o => o.type === 'ash' && todo(o)) : []; add('Make the dying ash safe', ash.filter(o => o.state !== 'present').length, ash.length);
+  const sp = os.filter(o => o.type === 'sapling' && todo(o) && !inBramble(o)); add('Guard exposed saplings', sp.filter(o => o.state === 'guarded').length, sp.length);
+  const br = os.filter(o => DEF[o.type].smother && todo(o) && !(o.type === 'bramble' && shelters(o) && o.state !== 'cutback') && (o.type === 'nettle' ? SEASON !== 'Winter' : !GROWING()));
+  add(GROWING() ? 'Cut back nettles smothering the flowers' : SEASON === 'Winter' ? 'Cut back bramble and dogwood' : 'Cut back bramble, dogwood and nettles', br.filter(o => o.state === 'cutback').length, br.length);
+  const lit = os.filter(o => DEF[o.type].cat === 'litter' && todo(o)); add('Clear the rubbish', lit.filter(o => o.state === 'gone').length, lit.length);
+  const outstanding = os.reduce((a, o) => a + o.loads.length, 0) + UNITS.reduce((a, u) => a + u.carrying.length, 0);
+  if (G.delivered + outstanding > 0) add('Carry cut material back', G.delivered, G.delivered + outstanding);
+  const dw = os.filter(o => o.type === 'deadwood' || (o.type === 'ash' && (o.state === 'habitat' || o.state === 'logged'))); add('Keep the deadwood', dw.filter(o => o.state === 'present' || o.state === 'habitat').length, dw.length, true);
+  const nat = os.filter(o => DEF[o.type].nshrub && o.type !== 'hazel'); add('Native shrubs kept', nat.filter(o => o.state !== 'cut').length, nat.length, true);
+  const jobs = out.filter(g => !g.keep), pct = jobs.length ? Math.round(jobs.reduce((a, g) => a + g.done / g.total, 0) / jobs.length * 100) : 100;
+  return {list:out, pct, none:!jobs.length, allDone:jobs.length > 0 && jobs.every(g => g.done >= g.total)};
+}
+function deliver(u){
+  for (const it of u.carrying){
+    if (it === 'brash') G.bank.burnt++;
+    else if (it === 'litter'){ const o = u.task && u.task.o; const d = o ? DEF[o.type] : {cost:5, gw:1}; G.skipCost += d.cost; G.skipItems++; G.gw = Math.min(100, G.gw + d.gw); if (o){ o.state = 'gone'; } }
+    else G.bank[it]++;
+    G.delivered++;
+  }
+  u.carrying = [];
+}
+function nextFromQueue(u){
+  while (!u.task && u.queue.length){ const t = u.queue.shift(); if (t.kind === 'move' || t.kind === 'haul' ? true : (t.o && t.o.state !== 'gone' && actionValid(t.kind, t.o))){ u.task = t; t.phase = null; plan(u); } }
+}
+function step(u, dt){
+  if (!u.task && u.queue.length && !(G.t < G.teaUntil)) nextFromQueue(u);
+  // stamina
+  const t = u.task;
+  if (u.path.length){
+    const spd = 150 * (0.75 + u.stamina / 400) * (u.carrying.length ? 0.8 : 1) / costAt(u.x, u.y);
+    let move = spd * dt;
+    while (move > 0 && u.path.length){
+      const [px, py] = u.path[0], dx = px - u.x, dy = py - u.y, d = Math.hypot(dx, dy);
+      if (d <= move){ u.x = px; u.y = py; u.path.shift(); move -= d; } else { u.x += dx / d * move; u.y += dy / d * move; move = 0; }
+    }
+    u.stamina = Math.max(0, u.stamina - dt * (u.carrying.length ? 0.3 : 0.15) * (t && t.kind === 'rest' ? 0 : 1));
+    if (exhausted(u)) return;
+    if (u.path.length) return;
+    arrive(u); return;
+  }
+  if (!t) return;
+  if (t.phase === 'work'){
+    const o = t.o;
+    if (o.need === 0 || o.workKind !== t.kind){ afterWork(u); return; }
+    const rate = skillFor(u, t.kind) * (0.45 + u.stamina / 180);
+    o.work += rate * dt; u.stamina = Math.max(0, u.stamina - dt * 0.7); u.swing += dt * 6;
+    if (exhausted(u)) return;
+    if (o.work >= o.need){ complete(o, t.kind); UNITS.forEach(v => { if (v.task && v.task.o === o && v.task.phase === 'work') afterWork(v); }); }
+  } else if (t.phase === 'rest'){
+    u.stamina = Math.min(100, u.stamina + dt * 1.1);
+    if (u.stamina >= 70){ u.task = null; log(`${u.name} has got their breath back and returns to work.`, 'info'); }
+  } else if (t.phase === 'tea'){
+    if (G.t >= G.teaUntil){ u.stamina = 100; const s = u.saved; u.task = s; u.saved = null; if (s){ plan(u); } else u.status = 'Waiting at the meet point'; }
+  }
+}
+// Worn out: drop everything, walk back to the meet point and sit down for a long rest. The job they were on goes back on their list.
+function exhausted(u){ const t = u.task; if (u.stamina > 10 || (t && (t.kind === 'tea' || t.kind === 'rest'))) return false;
+  if (t && t.kind !== 'move' && !(t.kind === 'haul' && t.phase === 'deliver')){ t.phase = null; u.queue.unshift(t); }
+  u.task = {kind:'rest', phase:null}; plan(u);
+  log(`${u.name} is exhausted and heads back to the meet point to rest. A tea break earlier would have kept them going.`, 'bad'); toast(`${u.name} is worn out and has gone to rest.`, true); return true; }
+function afterWork(u){
+  const o = u.task.o;
+  if (o.loads.length){ u.task = {kind:'haul', o, phase:'pickup'}; pickup(u); }
+  else { u.task = null; }
+}
+function pickup(u){
+  const o = u.task.o, n = Math.min(u.carry, o.loads.length);
+  if (!n){ u.task = null; return; }
+  u.carrying = o.loads.splice(0, n); o.sprite = null;
+  const dest = DROP[u.carrying[0]] || DROP.poles;
+  u.path = pathTo(u, dest[0] + (u.idx - 3) * 6, dest[1] - 18); u.task.phase = 'deliver';
+}
+function prefetch(u){ const nx = u.queue.find(t => NEEDS[t.kind]); if (nx && u.item !== NEEDS[nx.kind]){ u.item = NEEDS[nx.kind]; log(`${u.name} picks up ${u.item === 'guard' ? 'a tree guard' : 'the herbicide kit'} while at the meet point, ready for the next job.`, 'info'); } }
+function arrive(u){
+  const t = u.task; if (!t) return;
+  if (t.phase === 'move'){ u.task = null; return; }
+  if (t.phase === 'rest'){ if (u.carrying.length) deliver(u); return; }
+  if (t.phase === 'fetch'){ u.item = NEEDS[t.kind]; plan(u); return; }
+  if (t.phase === 'go'){
+    const o = t.o;
+    if (o.state === 'gone' || !actionValid(t.kind, o)){ u.task = null; return; }
+    if (!startWork(u)) return;
+    if (t.kind === 'guard' || t.kind === 'treat'){ /* item consumed on completion */ }
+    return;
+  }
+  if (t.phase === 'gohaul'){ pickup(u); return; }
+  if (t.phase === 'deliver'){ deliver(u); prefetch(u); const o = t.o; if (o && o.loads.length){ u.task = {kind:'haul', o, phase:null}; plan(u); } else u.task = null; return; }
+}
+function actionValid(kind, o){
+  const s = o.state;
+  if (kind === 'clear') return s === 'present';
+  if (kind === 'treat') return s === 'stump';
+  if (kind === 'coppice') return s === 'present';
+  if (kind === 'fell') return s === 'present';
+  if (kind === 'firewood') return (o.type === 'ash' && s === 'felled') || (o.type === 'deadwood' && s === 'present');
+  if (kind === 'pick') return s === 'present';
+  if (kind === 'guard') return s === 'present';
+  if (kind === 'harvest' || kind === 'cutback') return s === 'present';
+  return true;
+}
+function statusOf(u){ const s = statusCore(u); return u.queue.length ? `${s} · then ${u.queue.length} more` : s; }
+function statusCore(u){
+  const t = u.task;
+  if (!t) return 'Idle';
+  const zn = t.o ? ZMAP[t.o.zone]?.name : '';
+  const nm = t.o ? dispName(t.o).toLowerCase() : '';
+  const pct = t.o && t.o.need ? Math.round(t.o.work / t.o.need * 100) : 0;
+  switch (t.phase){
+    case 'move': return 'Walking';
+    case 'tea': return G.t < G.teaUntil && !u.path.length ? 'Tea break' : 'Heading for tea';
+    case 'rest': return u.path.length ? 'Exhausted, heading back to rest' : `Resting at the meet point · ${Math.round(u.stamina)}%`;
+    case 'fetch': return `Fetching a ${NEEDS[t.kind] === 'guard' ? 'tree guard' : 'herbicide kit'}`;
+    case 'go': return `Walking to the ${nm}`;
+    case 'work': return ({clear:`Cutting ${nm}`, harvest:`Cutting ${nm} for produce`, cutback:`Cutting back ${nm}`, treat:'Treating stumps', coppice:'Coppicing hazel', fell:'Felling ash', firewood:'Cutting firewood', pick:`Picking up ${nm}`, guard:'Fitting a tree guard'})[t.kind] + ` · ${pct}%`;
+    case 'gohaul': return 'Going back for loads';
+    case 'deliver': return `Carrying ${u.carrying.length > 1 ? u.carrying.length + ' loads' : u.carrying[0] === 'litter' ? 'rubbish to the skip' : u.carrying[0] === 'brash' ? 'brash to the fire' : u.carrying[0] === 'greenery' ? 'holly greenery' : u.carrying[0] === 'nettles' ? 'nettle tops' : u.carrying[0]}`;
+  }
+  return 'Busy';
+}
+
+// ===================== condition =====================
+const INDNAME = {invasive:'Invasive species', natives:'Native shrubs', deadwood:'Deadwood', regen:'Regeneration', structure:'Coppice structure', disturbance:'Rubbish and disturbance', veteran:'Veteran trees', flowers:'Woodland flowers', scrub:'Bramble and scrub in check'};
+const IW = {invasive:2, flowers:3, scrub:2};
+const BANDOF = v => v >= 2.5 ? 'Good' : v >= 2 ? 'Moderate' : 'Poor';
+function assessTile(){
+  const os = OBJS.filter(o => !LOCK.has(o.zone)), out = {}, has = f => os.some(f);
+  if (has(o => DEF[o.type].inv)){ let tot = 0, rem = 0; os.forEach(o => { const w = DEF[o.type].inv; if (!w) return; tot += w; rem += w * (o.state === 'present' ? 1 : o.state === 'stump' ? 0.35 : 0); }); const r = rem / tot; out.invasive = r <= 0.1 ? 3 : r <= 0.5 ? 2 : 1; }
+  const nat = os.filter(o => DEF[o.type].nshrub && o.type !== 'hazel'); if (nat.length){ const f = nat.filter(o => o.state !== 'cut').length / nat.length; out.natives = f >= .95 ? 3 : f >= .5 ? 2 : 1; }
+  const dwAll = os.filter(o => o.type === 'deadwood' || o.type === 'ash'); if (dwAll.length){ const left = os.filter(o => (o.type === 'deadwood' && o.state === 'present') || (o.type === 'ash' && o.state === 'habitat')).length;
+    const gone = os.filter(o => (o.type === 'deadwood' && o.state === 'removed') || (o.type === 'ash' && o.state === 'logged')).length; out.deadwood = gone ? (left ? 2 : 1) : left >= 2 ? 3 : left === 1 ? 2 : 1; }
+  const sp = os.filter(o => o.type === 'sapling'); if (sp.length){ const f = sp.filter(o => o.state === 'guarded' || inBramble(o)).length / sp.length; out.regen = f >= 0.99 ? 3 : f >= 0.5 ? 2 : 1; }
+  if (has(o => o.type === 'hazel')){ const c = os.filter(o => o.type === 'hazel' && o.state === 'coppiced').length; out.structure = c >= 1 && c <= 3 ? 3 : c >= 4 ? 2 : 1; }
+  const l = os.filter(o => DEF[o.type].cat === 'litter'); if (l.length){ const r = l.filter(o => o.state !== 'gone' && o.state !== 'bagged').length / l.length; out.disturbance = r === 0 ? 3 : r <= 0.5 ? 2 : 1; }
+  const vs = os.filter(o => o.type === 'veteran'); if (vs.length){ let f = 0; vs.forEach(v => { const h = haloStatus(v); f += h.total ? h.done / h.total : 1; }); f /= vs.length; out.veteran = f >= .99 ? 3 : f >= .5 ? 2 : 1; }
+  const fm = floraMean(FLORA); out.flowers = fm >= .4 ? 3 : fm >= .2 ? 2 : 1;
+  if (has(o => DEF[o.type].smother)) out.scrub = SCRUB <= .08 ? 3 : SCRUB <= .2 ? 2 : 1;
+  let sw = 0, sv = 0; for (const k in out){ const w = IW[k] || 1; sw += w; sv += w * out[k]; } const avg = sv / sw;
+  // a compartment cannot be Good while its floor is still bare of woodland flowers
+  const band = out.flowers === 1 && BANDOF(avg) === 'Good' ? 'Moderate' : BANDOF(avg);
+  return {ind:out, avg, band, flora:fm};
+}
+const BANDCOL = {Good:'#6CC488', Moderate:'#E2AE45', Poor:'#EE7F73'};
+const PRICE = {poles:12, peasticks:6, firewood:18, greenery:10, woodchip:4, nettles:2};
+const bankValue = () => Object.keys(PRICE).reduce((a, k) => a + G.bank[k] * PRICE[k], 0) - G.skipCost - G.guards * GUARD_COST - G.treated * HERB_COST;
+
+// ===================== drawing =====================
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d'), stage = document.getElementById('stage');
+let S = 1, DPR = 1, BG = null;
+function resize(){
+  const r = stage.getBoundingClientRect(); DPR = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = Math.round(r.width * DPR); cv.height = Math.round(r.height * DPR); S = r.width / W;
+}
+function blob(c, x, y, rx, ry, a, col){ c.fillStyle = col; c.beginPath(); c.ellipse(x, y, rx, ry, a, 0, Math.PI * 2); c.fill(); }
+function distToBrook(x, y){ let m = 1e9; for (let i = 1; i < BROOK.length; i++){ const [ax, ay] = BROOK[i - 1], [bx, by] = BROOK[i]; const dx = bx - ax, dy = by - ay, t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy))); m = Math.min(m, Math.hypot(ax + dx * t - x, ay + dy * t - y)); } return m; }
+function paintFlora(g){
+  const r = rng(77);
+  const ivy = (x, y) => { for (let k = 0; k < 6; k++) blob(g, x + (r() - .5) * 12, y + (r() - .5) * 10, 3.4, 2.4, r() * 3, k % 2 ? '#1F3A1E' : '#2B4A26'); };
+  const fern = (x, y) => { const cols = ['#7A8A34', '#9A7E30', '#6E8A30', '#A8742C']; g.lineWidth = 2.2; for (let k = 0; k < 7; k++){ const a = k / 7 * 6.28 + r() * .4, len = 9 + r() * 6; g.strokeStyle = cols[k % 4]; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len); g.stroke(); blob(g, x + Math.cos(a) * len * .7, y + Math.sin(a) * len * .7, 3, 1.6, a, cols[(k + 1) % 4]); } };
+  const mercury = (x, y) => { for (let k = 0; k < 7; k++) blob(g, x + (r() - .5) * 12, y + (r() - .5) * 12, 2, 1.6, r() * 3, '#4E7A2E'); };
+  const bramble = (x, y) => { g.strokeStyle = '#5A2E3A'; g.lineWidth = 1.6; for (let k = 0; k < 2; k++){ g.beginPath(); g.arc(x + (r() - .5) * 8, y + (r() - .5) * 8, 7 + r() * 4, r() * 3, r() * 3 + 2.4); g.stroke(); } for (let k = 0; k < 5; k++) blob(g, x + (r() - .5) * 14, y + (r() - .5) * 14, 3, 2.2, r() * 3, k % 2 ? '#3E5A2A' : '#5A4A2A'); };
+  const grass = (x, y) => { g.strokeStyle = r() < .5 ? '#8A9A4A' : '#9AA456'; g.lineWidth = 1.4; for (let k = 0; k < 6; k++){ const a = -1.57 + (r() - .5) * 1.4; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * 7, y + Math.sin(a) * 7); g.stroke(); } };
+  const fungi = (x, y) => { blob(g, x, y, 3, 2.4, 0, '#E9DDB8'); blob(g, x + 4, y + 2, 2, 1.6, 0, '#D98A3A'); };
+  for (let row = 0; row < ROWS; row++) for (let c = 0; c < COLS; c++){
+    const x0 = c * CELL, y0 = row * CELL, cx = x0 + CELL / 2, cy = y0 + CELL / 2, z = zoneAt(cx, cy);
+    if (z === 'ride' || z === 'meet') continue;
+    const l = L0[row * COLS + c], jx = () => x0 + r() * CELL, jy = () => y0 + r() * CELL;
+    if (z === 'brook' && distToBrook(cx, cy) < 36){ for (let k = 0; k < 3; k++) blob(g, jx(), jy(), 5 + r() * 4, 3 + r() * 3, r() * 3, r() < .5 ? '#6E9A3A' : '#5C8A34'); continue; }
+    if (l < .15){ if (r() < .08) fungi(jx(), jy()); continue; }
+    if (l < .3){ if (r() < .7) blob(g, jx(), jy(), 6, 4, r() * 3, 'rgba(85,112,46,.7)'); if (r() < .45) ivy(jx(), jy()); continue; }
+    if (l < .55){ if (r() < .45) ivy(jx(), jy()); if (r() < .45) fern(jx(), jy()); if (r() < .35) mercury(jx(), jy()); continue; }
+    if (l < .8){ if (r() < .45) fern(jx(), jy()); if (r() < .4) bramble(jx(), jy()); if (r() < .35) grass(jx(), jy()); continue; }
+    if (r() < .6) bramble(jx(), jy()); if (r() < .6) grass(jx(), jy());
+  }
+}
+function floraAt(x, y, l){
+  const z = zoneAt(x, y);
+  if (z === 'brook' && distToBrook(x, y) < 36) return 'Mosses and opposite-leaved golden saxifrage along the water';
+  if (l < .15) return 'Bare leaf litter: too dark for almost anything to grow';
+  if (l < .3) return 'Moss and a thin carpet of ivy';
+  if (l < .55) return 'Ivy, male fern and dog’s mercury (an ancient woodland indicator)';
+  if (l < .8) return 'Ferns, bramble and woodland grasses';
+  return 'Bramble and grasses: open, bright ground';
+}
+function paintMeetGround(g, r){
+  g.fillStyle = '#6E7D45'; g.beginPath(); g.roundRect(MEET.x, MEET.y, MEET.w, MEET.h, 30); g.fill();
+  for (let i = 0; i < 600; i++){ blob(g, MEET.x + 10 + r() * (MEET.w - 20), MEET.y + 10 + r() * (MEET.h - 20), 1.5, 3, r() * 3, r() < .5 ? '#7E8C4E' : '#5E6D3A'); }
+  g.fillStyle = '#9C9682'; g.beginPath(); g.roundRect(mx(770), my(900), 60 * MK, 60 * MK, 6); g.fill();
+}
+function paintPaths(g, r){
+  const line = (P) => { g.beginPath(); P.forEach((p, i) => i ? g.lineTo(...p) : g.moveTo(...p)); };
+  for (const P of TRACKS){ if (!P.length) continue; g.strokeStyle = 'rgba(122,106,72,.85)'; g.lineWidth = 15; line(P); g.stroke(); g.strokeStyle = 'rgba(168,148,106,.75)'; g.lineWidth = 9; g.stroke(); g.strokeStyle = 'rgba(100,80,50,.5)'; g.lineWidth = 2; g.setLineDash([4, 8]); g.stroke(); g.setLineDash([]); }
+  for (const rd of RIDES){ g.strokeStyle = '#6A7442'; g.lineWidth = rd.w + 12; line(rd.pts); g.stroke(); g.strokeStyle = '#839052'; g.lineWidth = rd.w + 2; g.stroke();
+    // trodden centre line wanders a little within the ride
+    g.strokeStyle = 'rgba(140,112,70,.55)'; g.lineWidth = rd.w * .32; g.beginPath(); rd.pts.forEach((p, i) => { const w = Math.sin(i * .7) * rd.w * .18; i ? g.lineTo(p[0] + w * .3, p[1] + w) : g.moveTo(p[0], p[1]); }); g.stroke();
+    for (let k = 0; k < rd.pts.length; k += 1){ const [x, y] = rd.pts[k]; for (let q = 0; q < 2; q++) blob(g, x + (r() - .5) * rd.w * 1.6, y + (r() - .5) * rd.w * 1.6, 2.4, 1.4, r() * 3, r() < .5 ? '#9AA456' : '#6E7D45'); } }
+}
+function drawBeyond(g, r){
+  const path = P => { g.beginPath(); P.forEach((p, i) => i ? g.lineTo(...p) : g.moveTo(...p)); g.closePath(); };
+  // fields and downland outside the wood
+  for (const f of FIELDS){ g.save(); path(f); g.clip(); g.fillStyle = '#6F7A45'; g.fillRect(0, 0, W, H);
+    g.strokeStyle = 'rgba(150,160,96,.45)'; g.lineWidth = 3; for (let k = -H; k < W; k += 22){ g.beginPath(); g.moveTo(k, 0); g.lineTo(k + H * .5, H); g.stroke(); } g.restore(); }
+  for (const L of LANES){ g.strokeStyle = '#8E8872'; g.lineWidth = 34; g.beginPath(); L.forEach((p, i) => i ? g.lineTo(...p) : g.moveTo(...p)); g.stroke(); g.strokeStyle = '#A8A28A'; g.lineWidth = 26; g.stroke(); }
+  // neighbouring compartments: a suggestion of their canopy
+  g.save(); g.beginPath(); g.rect(0, 0, W, H); OUTLINE.forEach((p, i) => i ? g.lineTo(...p) : g.moveTo(...p)); g.closePath(); g.clip('evenodd');
+  for (let k = 0; k < 260; k++){ const x = r() * W, y = r() * H; if (FIELDS.some(f => inPoly(x, y, f)) || RIDES.some(rd => distToLine(rd.pts, x, y) < 50) || TRACKS.some(P => P.length && distToLine(P, x, y) < 40)) continue; const rr = 34 + r() * 40;
+    blob(g, x + 6, y + 8, rr, rr * .9, 0, 'rgba(8,14,8,.35)'); blob(g, x, y, rr, rr * .9, r() * 3, ['#2E4A2C','#33512F','#2A4528','#365530'][k % 4]); }
+  paintPaths(g, rng(77));
+  // the dim wash that says "not today"
+  g.fillStyle = 'rgba(10,16,12,.55)'; g.fillRect(0, 0, W, H); g.restore();
+  if (!inPoly(MEET.x + MEET.w / 2, MEET.y + MEET.h / 2, OUTLINE) || !inPoly(MEET.x, MEET.y, OUTLINE) || !inPoly(MEET.x + MEET.w, MEET.y + MEET.h, OUTLINE)) paintMeetGround(g, rng(91));
+  // the wood's outer bank, then this compartment's edge
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  for (const L of WOODEDGE){ g.strokeStyle = '#5A4630'; g.lineWidth = 12; g.beginPath(); L.forEach((p, i) => i ? g.lineTo(...p) : g.moveTo(...p)); g.stroke(); g.strokeStyle = '#8A6A44'; g.lineWidth = 5; g.stroke(); }
+  path(OUTLINE); g.strokeStyle = 'rgba(14,21,17,.6)'; g.lineWidth = 9; g.stroke(); g.setLineDash([16, 10]); g.strokeStyle = 'rgba(230,236,226,.85)'; g.lineWidth = 3.5; g.stroke(); g.setLineDash([]);
+  // names of what lies beyond
+  g.textAlign = 'center'; g.font = '700 22px "Zilla Slab", Georgia, serif';
+  for (const n of NEIGH.concat(FIELDLABELS)){ const t = n.n, w = g.measureText(t).width, x = Math.max(w / 2 + 16, Math.min(W - w / 2 - 16, n.at[0])), y = Math.max(30, Math.min(H - 16, n.at[1]));
+    g.fillStyle = 'rgba(14,21,17,.7)'; g.beginPath(); g.roundRect(x - w / 2 - 10, y - 20, w + 20, 30, 8); g.fill(); g.fillStyle = 'rgba(230,236,226,.88)'; g.fillText(t, x, y + 2); }
+  for (const gt of GATES){ const [x, y] = gt.at; g.fillStyle = '#E3B54A'; g.strokeStyle = '#1A2A1E'; g.lineWidth = 3; g.beginPath(); g.roundRect(x - 12, y - 12, 24, 24, 4); g.fill(); g.stroke();
+    g.font = '700 18px "Source Sans 3", sans-serif'; g.fillStyle = '#E3B54A'; g.fillText(gt.n, x, y - 20); }
+  // compass
+  g.save(); g.translate(W - 56, 56); g.fillStyle = 'rgba(14,21,17,.8)'; g.beginPath(); g.arc(0, 0, 30, 0, 6.2832); g.fill(); g.rotate(NORTH * Math.PI / 180);
+  g.fillStyle = '#E3B54A'; g.beginPath(); g.moveTo(0, -22); g.lineTo(8, 0); g.lineTo(-8, 0); g.closePath(); g.fill(); g.fillStyle = '#E6ECE2'; g.beginPath(); g.moveTo(0, 22); g.lineTo(8, 0); g.lineTo(-8, 0); g.closePath(); g.fill();
+  g.font = '700 14px "Source Sans 3", sans-serif'; g.fillStyle = '#E6ECE2'; g.fillText('N', 0, -25); g.restore(); g.textAlign = 'left';
+}
+function buildBG(){
+  const c = document.createElement('canvas'); c.width = W * 1.5; c.height = H * 1.5; const g = c.getContext('2d'); g.scale(1.5, 1.5);
+  const r = rng(9);
+  g.fillStyle = '#4C4A2A'; g.fillRect(0, 0, W, H);
+  const LITTER = ['#7A5A28','#8E6A2E','#5E5226','#A0702C','#6B6A30','#544A22','#9A5A26'];
+  for (let i = 0; i < 8000; i++){ blob(g, r() * W, r() * H, 2 + r() * 4, 1 + r() * 2, r() * 3, LITTER[i % LITTER.length]); }
+  paintFlora(g);
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  [[22, '#3F4A33'], [14, '#4D6E73'], [7, '#6E98A0']].forEach(([w, col]) => { g.strokeStyle = col; g.lineWidth = w; g.beginPath(); BROOK.forEach((p, i) => i ? g.lineTo(...p) : g.moveTo(...p)); g.stroke(); });
+  paintPaths(g, r);
+  for (const [bx, by] of BRIDGES){ g.save(); g.translate(bx, by); g.rotate(.5); g.fillStyle = '#7A5E3A'; g.fillRect(-26, -9, 52, 18); g.strokeStyle = '#5A4226'; g.lineWidth = 2; for (let k = -22; k <= 22; k += 8){ g.beginPath(); g.moveTo(k, -9); g.lineTo(k, 9); g.stroke(); } g.fillStyle = '#4E3A22'; g.fillRect(-28, -11, 56, 3); g.fillRect(-28, 8, 56, 3); g.restore(); }
+  paintMeetGround(g, r);
+  for (const P of RUNS){ g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = 'rgba(40,30,18,.75)'; g.lineWidth = 12; g.beginPath(); P.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.stroke();
+    g.strokeStyle = 'rgba(122,98,64,.9)'; g.lineWidth = 6; g.stroke();
+    for (let k = 2; k < P.length - 1; k += 3){ const [x, y] = P[k]; blob(g, x - 3, y, 1.6, 1.4, 0, '#2A1E12'); blob(g, x + 3, y + 2, 1.6, 1.4, 0, '#2A1E12'); } }
+  if (OUTLINE) drawBeyond(g, r);
+  else if (STRIP){ g.fillStyle = '#3B3A24'; g.fillRect(0, 952, W, 48); for (let i = 0; i < 700; i++) blob(g, r() * W, 954 + r() * 44, 2.4, 1.4, r() * 3, ['#6B5A2A','#4E5A2A','#5E4A26'][i % 3]);
+    g.font = '600 15px "Source Sans 3", sans-serif'; g.fillStyle = 'rgba(230,236,226,.7)'; g.fillText(STRIP, 1060, 982); }
+  else { g.fillStyle = '#596A5E'; g.fillRect(0, 962, W, 38); g.fillStyle = '#E7E2CF'; g.fillRect(0, 990, W, 2);
+    for (let x = 0; x < W; x += 9){ if (x > 770 && x < 830) continue; blob(g, x, 958, 9, 7, 0, r() < .5 ? '#2F4A28' : '#3B5A2E'); }
+    g.fillStyle = '#7A6A4E'; g.fillRect(768, 950, 4, 16); g.fillRect(828, 950, 4, 16); }
+  for (const [n, x, y, a] of RIDENAMES){ g.save(); g.translate(x, y); g.rotate(a * Math.PI / 180); g.font = 'italic 700 20px "Source Sans 3", sans-serif'; g.fillStyle = 'rgba(227,221,168,.9)'; g.textAlign = 'center'; g.fillText(n, 0, 0); g.restore(); }
+  BG = c;
+}
+function buildShade(){ const c = document.createElement('canvas'); c.width = COLS; c.height = ROWS; const g = c.getContext('2d'); const im = g.createImageData(COLS, ROWS);
+  for (let i = 0; i < COLS * ROWS; i++){ im.data[i * 4] = 10; im.data[i * 4 + 1] = 12; im.data[i * 4 + 2] = 4; im.data[i * 4 + 3] = Math.round((1 - (DLIGHT || LIGHT)[i]) * .6 * 255); } g.putImageData(im, 0, 0); return c; }
+function buildLightLayer(){ const c = document.createElement('canvas'); c.width = COLS; c.height = ROWS; const g = c.getContext('2d'); const im = g.createImageData(COLS, ROWS);
+  for (let i = 0; i < COLS * ROWS; i++){ const l = LIGHT[i]; im.data[i * 4] = Math.round(40 + 215 * l); im.data[i * 4 + 1] = Math.round(50 + 175 * l); im.data[i * 4 + 2] = Math.round(170 - 120 * l); im.data[i * 4 + 3] = 150; } g.putImageData(im, 0, 0); return c; }
+function crownSprite(o){
+  if (o.crownSprite) return o.crownSprite;
+  const d = DEF[o.type], R = d.crown, size = (R + 26) * 2, k = 1.2, c = document.createElement('canvas'); c.width = size * k; c.height = size * k;
+  const g = c.getContext('2d'); g.scale(k, k); g.translate(size / 2, size / 2); const r = rng(o.id * 977 + 3);
+  const PAL = {oak:['#6E7A34','#8A8434','#9A7A2E','#5E6A2C','#A88A3A'], beech:['#B8682A','#C9822E','#9E5A24','#D29A3E','#A86A2E'], alder:['#3E5A2E','#4A6A34','#35502A','#58743A'], birch:['#D9C24A','#E5D060','#C0B040','#CDBE58'], veteran:['#6E7232','#8A7E34','#9A7430','#5E642C','#7E6A2E'], ash:['#A39538','#8E8A3A','#7C6E36','#B29A40']};
+  const SPAL = {Spring:{oak:['#A9C45A','#BCD36C','#94B24C','#C7D97E'], beech:['#9CCB4E','#B4DA62','#86BC44','#C2E072'], alder:['#7EA84A','#92B858','#6E9A40'], birch:['#B6D46A','#C8E07C','#A2C45A'], ash:['#A9C45A','#94B24C','#8E9A54']},
+    Summer:{oak:['#4E7A2E','#5E8A34','#3E6A28','#6A923C','#577F30'], beech:['#3E7A2E','#4E8A34','#356A28','#5A9238'], alder:['#2E5A26','#3A6A2E','#2A4E22'], birch:['#6E9A3A','#7EAA44','#5E8A34'], ash:['#6E8A3A','#7E9A44','#5E7A34']}};
+  const base = o.type === 'young' || o.type === 'veteran' ? 'oak' : o.type;
+  const pal = SEASON === 'Autumn' ? (PAL[o.type] || PAL.oak) : SEASON === 'Winter' ? null : SPAL[SEASON][base] || SPAL[SEASON].oak;
+  if (!pal){ // winter: bare branches
+    g.lineCap = 'round'; const n = o.type === 'veteran' || o.vet ? 9 : o.type === 'young' ? 5 : 7;
+    for (let i = 0; i < n; i++){ const a = i / n * 6.28 + r() * .5, L = R * (.75 + r() * .25); let x = Math.cos(a) * L * .45, y = Math.sin(a) * L * .45;
+      g.strokeStyle = 'rgba(150,136,116,.95)'; g.lineWidth = o.type === 'young' ? 2.4 : 5; g.beginPath(); g.moveTo(0, 0); g.lineTo(x, y); g.stroke();
+      for (let f = -1; f <= 1; f++){ const b = a + f * .35 + (r() - .5) * .2; g.lineWidth = 2.6; g.strokeStyle = 'rgba(170,156,136,.85)'; g.beginPath(); g.moveTo(x, y); const x2 = x + Math.cos(b) * L * .5, y2 = y + Math.sin(b) * L * .5; g.lineTo(x2, y2); g.stroke();
+        g.lineWidth = 1.4; for (let t = 0; t < 2; t++){ const c = b + (r() - .5) * .9; g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 + Math.cos(c) * L * .18, y2 + Math.sin(c) * L * .18); g.stroke(); } } }
+    if (o.type === 'alder') for (let i = 0; i < 20; i++){ const a = r() * 6.28, d = r() * R * .9; blob(g, Math.cos(a) * d, Math.sin(a) * d, 2.4, 1.2, a, '#6A3A4A'); }
+    if (o.type === 'veteran' || o.vet){ g.strokeStyle = '#B8B2A2'; g.lineWidth = 4; for (let i = 0; i < 3; i++){ const a = r() * 6.28; g.beginPath(); g.moveTo(Math.cos(a) * R * .3, Math.sin(a) * R * .3); g.lineTo(Math.cos(a) * R * .95, Math.sin(a) * R * .95); g.stroke(); } }
+    o.crownSprite = c; o.crownSize = size; return c; }
+  if (o.type === 'ash'){
+    g.strokeStyle = '#9A9486'; g.lineCap = 'round'; for (let i = 0; i < 10; i++){ const a = r() * 6.28; g.lineWidth = 3.5; g.beginPath(); g.moveTo(0, 0); const mx = Math.cos(a) * R * .55, my = Math.sin(a) * R * .55; g.lineTo(mx, my); g.lineTo(mx + Math.cos(a + .5) * R * .35, my + Math.sin(a + .5) * R * .35); g.stroke(); }
+    for (let i = 0; i < 26; i++){ const a = r() * 6.28, dd = (.35 + .6 * r()) * R; blob(g, Math.cos(a) * dd, Math.sin(a) * dd, 9, 6, a, pal[i % 4]); }
+  } else {
+    const lobes = o.type === 'veteran' ? 7 : o.type === 'birch' ? 9 : 5, n = Math.round((o.type === 'veteran' ? 150 : o.type === 'birch' ? 130 : o.type === 'young' ? 40 : 90) * (SEASON === 'Spring' ? .7 : 1));
+    const L = []; for (let i = 0; i < lobes; i++){ const a = i / lobes * 6.28 + r() * .5, dd = R * (o.type === 'veteran' ? .55 : .45) * (.7 + r() * .4); L.push([Math.cos(a) * dd, Math.sin(a) * dd]); }
+    L.push([0, 0]);
+    const br = o.type === 'birch' ? R * .09 : R * .14;
+    for (let i = 0; i < n; i++){ const [lx, ly] = L[i % L.length], a = r() * 6.28, dd = r() * R * .42; const x = lx + Math.cos(a) * dd, y = ly + Math.sin(a) * dd; if (Math.hypot(x, y) > R) continue;
+      blob(g, x, y, br * (.8 + r() * .5), br * (.7 + r() * .4), a, pal[i % pal.length]); }
+    for (let i = 0; i < n / 4; i++){ const a = r() * 6.28, dd = r() * R * .8; blob(g, Math.cos(a) * dd - 3, Math.sin(a) * dd - 4, br * .5, br * .35, a, 'rgba(255,240,190,.14)'); }
+    if (o.type === 'veteran' || o.vet){ g.strokeStyle = '#B8B2A2'; g.lineCap = 'round'; for (let i = 0; i < 5; i++){ const a = i / 5 * 6.28 + .6 + r() * .4; let x = Math.cos(a) * R * .35, y = Math.sin(a) * R * .35; g.lineWidth = 5; g.beginPath(); g.moveTo(x, y); x = Math.cos(a) * R * 1.02; y = Math.sin(a) * R * 1.02; g.lineTo(x, y); g.stroke(); g.lineWidth = 2.5; g.beginPath(); g.moveTo(Math.cos(a) * R * .8, Math.sin(a) * R * .8); g.lineTo(Math.cos(a + .25) * R * 1.05, Math.sin(a + .25) * R * 1.05); g.stroke(); } }
+  }
+  o.crownSprite = c; o.crownSize = size; return c;
+}
+function sprite(o){
+  if (o.sprite) return o.sprite;
+  const d = DEF[o.type], pad = 40, base = Math.max(o.r, d.spriteR || 0, d.trunk ? d.trunk + 10 : 0), size = (base + pad) * 2, k = 1.5, c = document.createElement('canvas'); c.width = size * k; c.height = size * k;
+  const g = c.getContext('2d'); g.scale(k, k); g.translate(size / 2, size / 2); const r = rng(o.id * 131 + 7); const s = o.state;
+  const shadow = (rx, ry) => blob(g, 6, 8, rx, ry, 0, 'rgba(10,8,2,.38)');
+  const stumps = (n, rad, treated) => { for (let i = 0; i < n; i++){ const a = r() * 6.28, dd = r() * rad; const x = Math.cos(a) * dd, y = Math.sin(a) * dd; blob(g, x, y, 5, 5, 0, '#4A3420'); blob(g, x, y, 3.2, 3.2, 0, treated ? '#4F7FD8' : '#D8C49A'); } };
+  const leafy = (rad, n, rx, ry, cols, gloss) => { shadow(rad, rad * .85); for (let i = 0; i < n; i++){ const a = r() * 6.28, dd = Math.sqrt(r()) * rad; const x = Math.cos(a) * dd, y = Math.sin(a) * dd; blob(g, x, y, rx, ry, a + r(), cols[i % cols.length]); if (gloss && i % 3 === 0) blob(g, x - 1, y - 1, rx * .45, ry * .3, a, 'rgba(255,255,255,.22)'); } };
+  const trunk = (rad, bark, ring) => { blob(g, 4, 5, rad + 2, rad + 1, 0, 'rgba(10,8,2,.45)'); blob(g, 0, 0, rad, rad, 0, bark); g.strokeStyle = ring; g.lineWidth = 1.5; g.beginPath(); g.arc(0, 0, rad * .7, 0, 6.28); g.stroke(); blob(g, -rad * .3, -rad * .3, rad * .35, rad * .25, 0, 'rgba(255,255,255,.12)'); };
+  const twigs = (col, n, w) => { g.strokeStyle = col; g.lineCap = 'round'; for (let i = 0; i < n; i++){ const a = r() * 6.28, l = o.r * (.5 + .5 * r()); g.lineWidth = w; g.beginPath(); g.moveTo(0, 0); const mx = Math.cos(a) * l * .6, my = Math.sin(a) * l * .6; g.lineTo(mx, my); g.lineTo(Math.cos(a + .3) * l, Math.sin(a + .3) * l); g.stroke(); } };
+  const leaves = (cols, n, rx, ry) => { for (let i = 0; i < n; i++){ const a = r() * 6.28, dd = Math.sqrt(r()) * o.r; blob(g, Math.cos(a) * dd, Math.sin(a) * dd, rx, ry, a, cols[i % cols.length]); } };
+  const dots = (col, n, rad) => { for (let i = 0; i < n; i++){ const a = r() * 6.28, dd = r() * o.r * .9; blob(g, Math.cos(a) * dd, Math.sin(a) * dd, rad, rad, 0, col); } };
+  const GREEN = ['#5E8A34','#6E9A3A','#4E7A2E','#7AA444'], FRESH = ['#A9C45A','#BCD36C','#94B24C','#8EBA4A'];
+  if (s === 'present' && !d.canopy && SEASON !== 'Autumn' && ['hazel','hawthorn','blackthorn','elder','bramble'].includes(o.type)){
+    shadow(o.r, o.r * .85); const S = SEASON;
+    if (o.type === 'hazel'){ twigs('#8A7E6C', 16, 2.2); if (S === 'Winter') dots('#E8D25A', 34, 1.9); else leaves(S === 'Spring' ? FRESH : GREEN, S === 'Spring' ? 80 : 120, 6, 5); }
+    if (o.type === 'hawthorn'){ if (S === 'Winter') twigs('#5A4A3A', 24, 1.6); else { leaves(S === 'Spring' ? FRESH : GREEN, 80, 3.6, 2.6); if (S === 'Spring') dots('#F6F2E6', 60, 2.2); } }
+    if (o.type === 'blackthorn'){ twigs('#2E2420', 30, 1.8); if (S === 'Spring') dots('#F8F6F0', 80, 2); if (S === 'Summer') leaves(GREEN, 80, 2.6, 1.8); }
+    if (o.type === 'elder'){ if (S === 'Winter') twigs('#B8AE96', 12, 2.4); else { leaves(S === 'Spring' ? FRESH : GREEN, 70, 4.5, 2.4); if (S === 'Summer') dots('#F2EEDC', 7, 5); } }
+    if (o.type === 'bramble'){ g.lineCap = 'round'; for (let i = 0; i < 26; i++){ const a = r() * 6.28, dd = r() * o.r * .9; g.strokeStyle = i % 2 ? '#6A2E3E' : '#7E3A4A'; g.lineWidth = 2; g.beginPath(); g.arc(Math.cos(a) * dd, Math.sin(a) * dd, 8 + r() * 10, r() * 6, r() * 6 + 2.2); g.stroke(); }
+      const k = Math.max(1, (o.r / 48) ** 2); leaves(S === 'Winter' ? ['#3A2A34','#4A3A2E','#2E3A26'] : S === 'Spring' ? FRESH : GREEN, Math.round((S === 'Winter' ? 45 : 110) * k), 3.6, 2.6); if (S === 'Summer') dots('#F2E2EA', Math.round(16 * k), 2.2); }
+    o.sprite = c; o.spriteSize = size; return c; }
+  if (o.type === 'dogwood' && s === 'present'){ shadow(o.r, o.r * .85); const S = SEASON; twigs(S === 'Winter' ? '#C0322A' : '#8A3A30', 26, S === 'Winter' ? 2.4 : 1.8);
+    if (S !== 'Winter') leaves(S === 'Autumn' ? ['#7A2A3A','#8E3A3A','#6A2A4A','#A04A3A'] : S === 'Spring' ? FRESH : GREEN, 85, 4, 2.6);
+    if (S === 'Summer') dots('#F2EEDC', 14, 3); if (S === 'Autumn') dots('#1A1A2A', 14, 1.8); o.sprite = c; o.spriteSize = size; return c; }
+  if (o.type === 'nettle' && s === 'present'){ const S = SEASON;
+    if (S === 'Winter'){ g.strokeStyle = '#6A5A3E'; g.lineWidth = 1.4; for (let i = 0; i < 22; i++){ const a = r() * 6.28, dd = Math.sqrt(r()) * o.r; const x = Math.cos(a) * dd, y = Math.sin(a) * dd; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (r() - .5) * 6, y - 5); g.stroke(); } }
+    else { leaves(S === 'Autumn' ? ['#7A7A34','#8A7A3A','#5E6A2A'] : ['#3E6A2A','#4E7A30','#2E5A24','#5A8A36'], S === 'Autumn' ? 70 : 130, 3.4, 2.4); if (S === 'Summer') dots('#8AA05A', 20, 1.4); }
+    o.sprite = c; o.spriteSize = size; return c; }
+  if (s === 'cut' && d.nshrub && o.type !== 'holly'){ stumps(4, o.r * .35, false); for (let i = 0; i < 10; i++){ const a = r() * 6.28, dd = r() * o.r * .4; blob(g, Math.cos(a) * dd, Math.sin(a) * dd, 2.4, 1.6, a, '#7DAE4A'); } o.sprite = c; o.spriteSize = size; return c; }
+  if (s === 'cutback'){ g.lineCap = 'round'; for (let i = 0; i < 14; i++){ const a = r() * 6.28, dd = Math.sqrt(r()) * o.r * .8; const x = Math.cos(a) * dd, y = Math.sin(a) * dd; g.strokeStyle = '#6A3E3A'; g.lineWidth = 2; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (r() - .5) * 8, y + (r() - .5) * 8); g.stroke(); }
+    g.strokeStyle = '#5A4A32'; g.lineWidth = 2.2; for (let i = 0; i < 16; i++){ const y = o.r * .9 + (r() - .5) * 8; g.beginPath(); g.moveTo(-o.r * .8 + r() * 10, y); g.lineTo(o.r * .8 - r() * 10, y + (r() - .5) * 6); g.stroke(); } o.sprite = c; o.spriteSize = size; return c; }
+  switch (o.type){
+    case 'rhodo': case 'rhodoSmall':
+      if (s === 'present') leafy(o.r, o.type === 'rhodo' ? 220 : 50, 9, 3.4, ['#183A22','#21492B','#122E1A','#2A5A34'], true);
+      else stumps(o.type === 'rhodo' ? 10 : 3, o.r * .55, s === 'treated'); break;
+    case 'laurel':
+      if (s === 'present') leafy(o.r, 95, 9, 5, ['#4C8E3A','#5AA046','#3F7A31','#67AE50'], true);
+      else stumps(6, o.r * .5, s === 'treated'); break;
+    case 'holly':
+      if (s === 'present'){ shadow(o.r, o.r * .85); for (let i = 0; i < 70; i++){ const a = r() * 6.28, dd = Math.sqrt(r()) * o.r; const x = Math.cos(a) * dd, y = Math.sin(a) * dd;
+          g.save(); g.translate(x, y); g.rotate(r() * 6.28); g.fillStyle = i % 3 ? '#14361F' : '#1D4A2A'; g.beginPath(); g.moveTo(-6, 0); g.lineTo(-4, -2.6); g.lineTo(-2, -1); g.lineTo(0, -3.2); g.lineTo(2, -1); g.lineTo(4, -2.6); g.lineTo(6, 0); g.lineTo(4, 2.6); g.lineTo(2, 1); g.lineTo(0, 3.2); g.lineTo(-2, 1); g.lineTo(-4, 2.6); g.closePath(); g.fill(); g.restore(); }
+        for (let i = 0; i < 14; i++){ const a = r() * 6.28, dd = r() * o.r * .85; blob(g, Math.cos(a) * dd, Math.sin(a) * dd, 2.4, 2.4, 0, '#D3302A'); } }
+      else stumps(1, 0, false); break;
+    case 'hawthorn':
+      shadow(o.r, o.r * .85); for (let i = 0; i < 80; i++){ const a = r() * 6.28, dd = Math.sqrt(r()) * o.r; blob(g, Math.cos(a) * dd, Math.sin(a) * dd, 3.6, 2.6, a, ['#5E6E2E','#7A7A34','#6A5A2A','#8A8A3E'][i % 4]); }
+      for (let i = 0; i < 26; i++){ const a = r() * 6.28, dd = r() * o.r * .9; blob(g, Math.cos(a) * dd, Math.sin(a) * dd, 1.9, 1.9, 0, '#B2241E'); } break;
+    case 'elder':
+      shadow(o.r, o.r * .85); for (let i = 0; i < 9; i++){ const a = i / 9 * 6.28 + r() * .3; for (let j = 1; j <= 4; j++){ blob(g, Math.cos(a) * j * 6, Math.sin(a) * j * 6, 4.5, 2.2, a, j % 2 ? '#B8B04A' : '#8E9A3E'); } }
+      for (let i = 0; i < 4; i++){ const a = r() * 6.28; for (let j = 0; j < 6; j++) blob(g, Math.cos(a) * 14 + (r() - .5) * 6, Math.sin(a) * 14 + (r() - .5) * 6, 1.6, 1.6, 0, '#2A1A2E'); } break;
+    case 'blackthorn':
+      shadow(o.r, o.r * .85); g.lineCap = 'round'; for (let i = 0; i < 30; i++){ const a = r() * 6.28, dd = r() * o.r * .9; g.strokeStyle = i % 2 ? '#2E2420' : '#3E302A'; g.lineWidth = 1.8; g.beginPath(); g.moveTo(Math.cos(a) * dd * .3, Math.sin(a) * dd * .3); g.lineTo(Math.cos(a) * dd, Math.sin(a) * dd); g.stroke(); }
+      for (let i = 0; i < 70; i++){ const a = r() * 6.28, dd = Math.sqrt(r()) * o.r; blob(g, Math.cos(a) * dd, Math.sin(a) * dd, 2.6, 1.8, a, ['#4E5A2A','#5E6A30','#3A4422','#6E6A34'][i % 4]); }
+      for (let i = 0; i < 18; i++){ const a = r() * 6.28, dd = r() * o.r * .85; blob(g, Math.cos(a) * dd, Math.sin(a) * dd, 2.4, 2.4, 0, '#3B4170'); } break;
+    case 'laurelSmall':
+      if (s === 'present') leafy(o.r, 40, 9, 5, ['#4C8E3A','#5AA046','#3F7A31','#67AE50'], true);
+      else stumps(2, o.r * .4, s === 'treated'); break;
+    case 'netting':
+      g.strokeStyle = '#8A8478'; g.lineWidth = 1.2; for (let k = -o.r; k <= o.r; k += 7){ g.beginPath(); g.moveTo(k, -o.r * .6); g.lineTo(k + o.r * .5, o.r * .6); g.stroke(); g.beginPath(); g.moveTo(k + o.r * .5, -o.r * .6); g.lineTo(k, o.r * .6); g.stroke(); }
+      for (let i = 0; i < 10; i++) blob(g, (r() - .5) * o.r * 1.6, (r() - .5) * o.r, 3, 2, 0, '#8A4A2A'); g.fillStyle = '#5A4A3A'; g.fillRect(-o.r, -3, 5, 8); g.fillRect(o.r - 5, -2, 5, 8); break;
+    case 'pots':
+      for (let i = 0; i < 9; i++){ const a = r() * 6.28, dd = r() * o.r * .7; blob(g, Math.cos(a) * dd, Math.sin(a) * dd, 6, 6, 0, i % 3 ? '#1E1E1E' : '#B5643A'); blob(g, Math.cos(a) * dd, Math.sin(a) * dd, 3, 3, 0, '#3A2E26'); }
+      for (let i = 0; i < 24; i++){ const a = r() * 6.28, dd = Math.sqrt(r()) * o.r; blob(g, Math.cos(a) * dd, Math.sin(a) * dd, 3, 1.6, a, ['#6E8A3A','#8A7A3A','#5E7A30'][i % 3]); } break;
+    case 'bramble':
+      g.lineCap = 'round'; for (let i = 0; i < 26 * Math.max(1, o.r / 48); i++){ const a = r() * 6.28, dd = r() * o.r * .9; const x = Math.cos(a) * dd, y = Math.sin(a) * dd; g.strokeStyle = i % 2 ? '#6A2E3E' : '#7E3A4A'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 8 + r() * 10, r() * 6, r() * 6 + 2.2); g.stroke(); }
+      { const k = Math.max(1, (o.r / 48) ** 2); for (let i = 0; i < 110 * k; i++){ const a = r() * 6.28, dd = Math.sqrt(r()) * o.r; blob(g, Math.cos(a) * dd, Math.sin(a) * dd, 3.6, 2.6, a, ['#3E5A2A','#4E5A2A','#6A4A2E','#2E4A26'][i % 4]); } }
+      for (let i = 0; i < 8 * Math.max(1, (o.r / 48) ** 2); i++){ const a = r() * 6.28, dd = r() * o.r * .8; blob(g, Math.cos(a) * dd, Math.sin(a) * dd, 1.8, 1.8, 0, '#1E1420'); } break;
+    case 'hazel':
+      if (s === 'present'){ shadow(o.r, o.r * .85); for (let i = 0; i < 12; i++){ const a = i / 12 * 6.28 + r() * .3; g.strokeStyle = '#8A7E6C'; g.lineWidth = 2.4; g.beginPath(); g.moveTo(0, 0); g.lineTo(Math.cos(a) * o.r * .8, Math.sin(a) * o.r * .8); g.stroke(); }
+        const cols = ['#C9B44A','#B7C25C','#D8BE52','#9FB24E','#E0C860']; for (let i = 0; i < 120; i++){ const a = r() * 6.28, dd = (0.3 + 0.7 * Math.sqrt(r())) * o.r; blob(g, Math.cos(a) * dd, Math.sin(a) * dd, 6, 5, a, cols[i % 5]); } }
+      else { blob(g, 0, 0, 18, 18, 0, '#4F3C26'); for (let i = 0; i < 10; i++){ const a = i / 10 * 6.28; blob(g, Math.cos(a) * 11, Math.sin(a) * 11, 3.2, 3.2, 0, '#E3D3A8'); }
+        g.strokeStyle = '#6B5A3E'; g.lineWidth = 2; for (let i = 0; i < 26; i++){ const a = -0.9 + r() * 1.8, d1 = 30 + r() * 12; g.beginPath(); g.moveTo(Math.cos(a) * d1 - 10, Math.sin(a) * d1 + 30); g.lineTo(Math.cos(a) * d1 + 30, Math.sin(a) * d1 + 24); g.stroke(); } }
+      break;
+    case 'oak': trunk(d.trunk + (o.vet ? 6 : 0), '#5E5242', '#4A4034'); if (o.vet){ blob(g, 2, 1, 5, 4, .4, '#1A140C'); blob(g, d.trunk, -4, 5, 3, .5, '#D98A2E'); } break;
+    case 'young': trunk(d.trunk, '#6A5A44', '#54483A'); break;
+    case 'beech': trunk(d.trunk + (o.vet ? 6 : 0), '#8E8C86', '#77756F'); break;
+    case 'alder': trunk(d.trunk, '#4E4A40', '#3E3A32'); break;
+    case 'birch': trunk(d.trunk, '#E8E4DA', '#B8B2A6'); g.fillStyle = '#2A2A2A'; g.fillRect(-4, -2, 3, 1.5); g.fillRect(1, 2, 4, 1.5); break;
+    case 'veteran':
+      blob(g, 6, 7, d.trunk + 6, d.trunk + 4, 0, 'rgba(10,8,2,.5)');
+      for (let i = 0; i < 9; i++){ const a = i / 9 * 6.28; blob(g, Math.cos(a) * d.trunk * .55, Math.sin(a) * d.trunk * .55, d.trunk * .55, d.trunk * .45, a, i % 2 ? '#5A4C3A' : '#4E4232'); }
+      blob(g, 2, 1, d.trunk * .45, d.trunk * .38, .4, '#1A140C'); blob(g, d.trunk * .9, -d.trunk * .4, 7, 4, .5, '#D98A2E'); blob(g, -d.trunk * .7, d.trunk * .8, 5, 3, 0, '#C9B48A'); break;
+    case 'ash':
+      if (s === 'present') trunk(d.trunk, '#8D877A', '#77705F');
+      else if (s === 'felled' || s === 'habitat'){ g.save(); g.rotate(-0.35); blob(g, 6, 8, 70, 13, 0, 'rgba(10,8,2,.35)'); g.fillStyle = '#7C7566'; g.beginPath(); g.roundRect(-62, -11, 124, 22, 11); g.fill(); g.strokeStyle = '#625B4E'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(-55, -4); g.lineTo(50, -6); g.moveTo(-50, 5); g.lineTo(52, 3); g.stroke(); blob(g, -62, 0, 9, 11, 0, '#C8B88C');
+        if (s === 'habitat'){ blob(g, -20, -8, 16, 6, 0, '#6B8A3A'); blob(g, 25, -9, 12, 5, 0, '#7C9A44'); [[-5,-12],[8,-12],[35,9]].forEach(([x, y]) => blob(g, x, y, 4, 3, 0, '#E0B566')); } g.restore(); blob(g, 46, 20, 8, 8, 0, '#4A3420'); blob(g, 46, 20, 5, 5, 0, '#D8C49A'); }
+      else { blob(g, 0, 0, 8, 8, 0, '#4A3420'); blob(g, 0, 0, 5.5, 5.5, 0, '#D8C49A'); blob(g, 20, 12, 30, 6, -.35, 'rgba(160,140,90,.35)'); }
+      break;
+    case 'deadwood':
+      if (s === 'present'){ g.save(); g.rotate(0.25); if (o.big) g.scale(1.45, 1.6); blob(g, 6, 8, 60, 13, 0, 'rgba(10,8,2,.35)'); g.fillStyle = '#5E4532'; g.beginPath(); g.roundRect(-55, -12, 110, 24, 12); g.fill(); blob(g, -20, -8, 18, 6, 0, '#5F7D34'); blob(g, 22, -9, 14, 5, 0, '#6E8C3C'); [[-2,-13],[12,-12],[30,10],[-35,9]].forEach(([x, y]) => blob(g, x, y, 4.5, 3, 0, '#D9B46A')); blob(g, 55, 0, 7, 12, 0, '#A98A62'); g.restore(); }
+      else blob(g, 0, 0, 52, 10, .25, 'rgba(170,150,100,.3)');
+      break;
+    case 'balsam':
+      for (let i = 0; i < 26; i++){ const a = r() * 6.28, dd = r() * o.r; const x = Math.cos(a) * dd, y = Math.sin(a) * dd; g.strokeStyle = i % 2 ? '#7E4A3E' : '#94584A'; g.lineWidth = 3; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (r() - .5) * 14, y + (r() - .5) * 14); g.stroke(); if (i % 5 === 0) blob(g, x, y, 3.5, 2.5, 0, '#D9A2BE'); if (i % 3 === 0) blob(g, x + 4, y + 2, 2.5, 5, a, '#8E8A4E'); }
+      break;
+    case 'sapling':
+      if (s === 'guarded') blob(g, 4, 5, 14, 14, 0, 'rgba(10,8,2,.3)');
+      if (SEASON === 'Winter'){ g.strokeStyle = '#6A5236'; g.lineWidth = 2; g.beginPath(); g.moveTo(-6, 0); g.lineTo(6, 0); g.moveTo(0, -6); g.lineTo(0, 6); g.stroke(); }
+      else for (let i = 0; i < 7; i++){ const a = i / 7 * 6.28; blob(g, Math.cos(a) * 6, Math.sin(a) * 6, 6, 3, a, SEASON === 'Autumn' ? (i % 2 ? '#B8902E' : '#9A7A2A') : i % 2 ? '#7DAE4A' : '#6A9A3E'); }
+      if (s === 'guarded'){ g.fillStyle = 'rgba(214,232,196,.55)'; g.strokeStyle = '#A7BB92'; g.lineWidth = 2; g.beginPath(); g.arc(0, 0, 12, 0, 6.28); g.fill(); g.stroke(); blob(g, 15, 0, 3, 3, 0, '#8B6B45'); }
+      else if (!inBramble(o)) { for (let i = 0; i < 3; i++) blob(g, Math.cos(i * 2) * 6, Math.sin(i * 2) * 6, 1.5, 1.5, 0, '#E6D9B8'); }
+      break;
+    case 'hearth': blob(g, 0, 0, 64, 52, 0, 'rgba(20,16,10,.55)'); blob(g, 0, 0, 52, 42, .3, '#2A231A'); for (let i = 0; i < 40; i++){ const a = i * 2.4, d = (i * 7 % 46); blob(g, Math.cos(a) * d, Math.sin(a) * d * .8, 3, 2, a, i % 3 ? '#14110C' : '#4A3E2C'); } break;
+    case 'sett': for (let i = 0; i < 5; i++){ const a = i / 5 * 6.28 + .3, x = Math.cos(a) * 26, y = Math.sin(a) * 20; blob(g, x + 4, y + 5, 16, 10, a, 'rgba(10,8,2,.35)'); blob(g, x, y, 15, 10, a, '#8A6A44'); blob(g, x * .8, y * .8, 6, 5, 0, '#1A120A'); } blob(g, 0, 0, 10, 8, 0, '#6E5232'); break;
+    case 'mattress': g.save(); g.rotate(-.2); blob(g, 5, 6, 40, 24, 0, 'rgba(10,8,2,.3)'); g.fillStyle = '#E2DCCB'; g.beginPath(); g.roundRect(-36, -22, 72, 44, 5); g.fill(); g.strokeStyle = '#A9BBCC'; g.lineWidth = 2; for (let i = -28; i <= 28; i += 9){ g.beginPath(); g.moveTo(i, -18); g.lineTo(i, 18); g.stroke(); } blob(g, 10, 4, 14, 8, 0, 'rgba(160,130,70,.45)'); g.restore(); break;
+    case 'tyre': g.strokeStyle = '#1C1C1C'; g.lineWidth = 10; g.beginPath(); g.arc(0, 0, 15, 0, 6.28); g.stroke(); g.strokeStyle = '#3A3A3A'; g.lineWidth = 2; g.setLineDash([3, 4]); g.beginPath(); g.arc(0, 0, 15, 0, 6.28); g.stroke(); g.setLineDash([]); break;
+    case 'bags': blob(g, -8, 0, 14, 12, .3, '#202020'); blob(g, 9, 4, 12, 10, -.2, '#2A2A2A'); blob(g, 20, -6, 6, 4, 0, '#E8E2D2'); blob(g, -18, 10, 5, 3, 0, '#C9C2AE'); break;
+    case 'cans': g.fillStyle = '#C7362F'; g.fillRect(-9, -4, 9, 5); g.fillStyle = '#B9BDC2'; g.fillRect(2, 2, 9, 5); g.fillStyle = '#3F7FC0'; g.fillRect(-2, -10, 5, 9); break;
+    case 'rubble': for (let i = 0; i < 26; i++){ const a = r() * 6.28, dd = r() * o.r * .8; g.fillStyle = ['#9C9585','#B5AE9D','#8A3E2E','#7A7468'][i % 4]; g.save(); g.translate(Math.cos(a) * dd, Math.sin(a) * dd); g.rotate(r() * 3); g.fillRect(-5, -4, 10, 8); g.restore(); } break;
+  }
+  o.sprite = c; o.spriteSize = size; return c;
+}
+function drawLoads(o){
+  if (!o.loads.length) return;
+  const base = o.state === 'cutback' ? [o.x - 8, o.y] : [o.x + o.r * .55, o.y + o.r * .55];
+  o.loads.forEach((it, i) => { const x = base[0] + i * 9, y = base[1] - i * 3;
+    if (it === 'brash'){ ctx.strokeStyle = '#2E4A26'; ctx.lineWidth = 2; for (let k = 0; k < 6; k++){ ctx.beginPath(); ctx.moveTo(x - 10, y + k - 3); ctx.lineTo(x + 10, y - k + 2); ctx.stroke(); } }
+    else if (it === 'poles'){ ctx.strokeStyle = '#B9A780'; ctx.lineWidth = 2.5; for (let k = 0; k < 5; k++){ ctx.beginPath(); ctx.moveTo(x - 16, y + k * 2 - 4); ctx.lineTo(x + 16, y + k * 2 - 6); ctx.stroke(); } }
+    else if (it === 'peasticks'){ ctx.strokeStyle = '#8F7E5E'; ctx.lineWidth = 1.5; for (let k = 0; k < 7; k++){ ctx.beginPath(); ctx.moveTo(x - 8, y + 6); ctx.lineTo(x + (k - 3) * 4, y - 10); ctx.stroke(); } }
+    else if (it === 'firewood'){ for (let k = 0; k < 3; k++){ blob(ctx, x + k * 6 - 6, y, 4, 4, 0, '#7A5A3A'); blob(ctx, x + k * 6 - 6, y, 2.4, 2.4, 0, '#D9BE8C'); } }
+    else if (it === 'litter'){ blob(ctx, x, y, 7, 6, 0, '#202020'); }
+    else if (it === 'woodchip'){ blob(ctx, x, y, 7, 6, 0, '#C9A86A'); blob(ctx, x, y, 4, 3, 0, '#E0C890'); }
+    else if (it === 'nettles'){ blob(ctx, x, y, 7, 5, 0, '#3E6A2A'); }
+    else if (it === 'greenery'){ blob(ctx, x, y, 9, 5, 0, '#1D4A2A'); blob(ctx, x - 2, y - 1, 1.8, 1.8, 0, '#D3302A'); blob(ctx, x + 3, y + 1, 1.8, 1.8, 0, '#D3302A'); }
+  });
+}
+function drawMeet(){ ctx.save(); ctx.translate(MEET.x, MEET.y); ctx.scale(MK, MK); ctx.translate(-600, -815); drawMeetAt(); ctx.restore(); }
+function drawMeetAt(){
+  // trailer
+  ctx.fillStyle = '#3C4A52'; ctx.beginPath(); ctx.roundRect(880, 830, 70, 44, 5); ctx.fill(); ctx.fillStyle = '#56656D'; ctx.fillRect(884, 834, 62, 10); ctx.strokeStyle = '#2A3338'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(880, 852); ctx.lineTo(862, 852); ctx.stroke();
+  // gazebo
+  ctx.fillStyle = 'rgba(10,8,2,.3)'; ctx.fillRect(696, 836, 96, 60); ctx.fillStyle = '#2F6B45'; ctx.fillRect(690, 828, 96, 60); ctx.strokeStyle = '#25553A'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(690, 828); ctx.lineTo(786, 888); ctx.moveTo(786, 828); ctx.lineTo(690, 888); ctx.stroke();
+  // tea table + urn
+  ctx.fillStyle = '#B9A47A'; ctx.fillRect(700, 870, 40, 14); blob(ctx, 712, 876, 5, 5, 0, '#C9CCCF'); blob(ctx, 726, 877, 3, 3, 0, '#F2F2F2');
+  // fire site for invasive brash
+  for (let i = 0; i < 10; i++){ const a = i / 10 * 6.28; blob(ctx, 658 + Math.cos(a) * 22, 910 + Math.sin(a) * 16, 4.5, 3.5, 0, '#8E8A80'); } blob(ctx, 658, 910, 18, 12, 0, '#2A2420');
+  const heap = Math.min(G.bank.burnt, 14); for (let i = 0; i < heap; i++){ const a = i * 2.4, dd = (i % 4) * 3; blob(ctx, 658 + Math.cos(a) * dd, 910 + Math.sin(a) * dd * .7, 9, 3, a, i % 2 ? '#24402A' : '#5A4A32'); }
+  if (G.running && G.bank.burnt){ const f = Math.sin(performance.now() / 120) * 2; blob(ctx, 658, 906, 9 + f, 7, 0, 'rgba(240,140,40,.85)'); blob(ctx, 658, 904, 5, 4 + f, 0, 'rgba(255,220,120,.9)'); blob(ctx, 664, 880 - f, 14, 9, 0, 'rgba(200,200,200,.18)'); blob(ctx, 672, 862, 18, 11, 0, 'rgba(200,200,200,.12)'); }
+  // skip
+  ctx.fillStyle = '#E2B21E'; ctx.beginPath(); ctx.moveTo(924, 884); ctx.lineTo(976, 884); ctx.lineTo(972, 924); ctx.lineTo(928, 924); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#5A4A12'; ctx.fillRect(930, 890, 40, 28);
+  for (let i = 0; i < Math.min(G.skipItems, 10); i++) blob(ctx, 936 + (i % 4) * 9, 912 - Math.floor(i / 4) * 7, 5, 4, 0, i % 2 ? '#2A2A2A' : '#9C9585');
+  // banked produce
+  for (let i = 0; i < Math.min(G.bank.woodchip, 10); i++){ const x = 712 + (i % 5) * 9, y = 936 - Math.floor(i / 5) * 7; ctx.fillStyle = '#E1DCCB'; ctx.fillRect(x, y, 8, 6); ctx.fillStyle = '#C9A86A'; ctx.fillRect(x + 1, y + 1, 6, 2); }
+  for (let i = 0; i < Math.min(G.bank.greenery, 12); i++){ const x = 700 + (i % 4) * 14, y = 922 - Math.floor(i / 4) * 9; blob(ctx, x, y, 7, 4, 0, '#1D4A2A'); blob(ctx, x - 2, y - 1, 1.6, 1.6, 0, '#D3302A'); blob(ctx, x + 2, y + 1, 1.6, 1.6, 0, '#D3302A'); }
+  ctx.strokeStyle = '#B9A780'; ctx.lineWidth = 2.5; for (let i = 0; i < Math.min(G.bank.poles + G.bank.peasticks, 16); i++){ const y = 940 - i * 3; ctx.beginPath(); ctx.moveTo(772, y); ctx.lineTo(812, y - 2); ctx.stroke(); }
+  for (let i = 0; i < Math.min(G.bank.firewood * 3, 24); i++){ const x = 852 + (i % 6) * 7, y = 938 - Math.floor(i / 6) * 6; blob(ctx, x, y, 3.6, 3.6, 0, '#7A5A3A'); blob(ctx, x, y, 2, 2, 0, '#D9BE8C'); }
+}
+function drawUnit(u){
+  const working = u.task && u.task.phase === 'work';
+  blob(ctx, u.x + 4, u.y + 6, 15, 11, 0, 'rgba(10,8,2,.45)');
+  if (u.sel){ ctx.strokeStyle = '#D3E63A'; ctx.lineWidth = 2.5; ctx.setLineDash([5, 4]); ctx.beginPath(); ctx.arc(u.x, u.y, 23, 0, 6.28); ctx.stroke(); ctx.setLineDash([]); }
+  if (u.carrying.length){ const it = u.carrying[0]; blob(ctx, u.x - 6, u.y + 4, 9, 6, .4, it === 'brash' ? '#2E4A26' : it === 'litter' ? '#202020' : it === 'firewood' ? '#7A5A3A' : '#B9A780'); }
+  blob(ctx, u.x, u.y, 14, 12, 0, '#EBDD3A');
+  ctx.strokeStyle = u.col; ctx.lineWidth = 4; ctx.beginPath(); ctx.ellipse(u.x, u.y, 14, 12, 0, 0, 6.28); ctx.stroke();
+  blob(ctx, u.x, u.y - 1, 7, 7, 0, '#6B4B34');
+  if (working){ const a = Math.sin(u.swing) * .9; ctx.strokeStyle = '#D9D9D9'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(u.x + 6, u.y); ctx.lineTo(u.x + 6 + Math.cos(a) * 20, u.y + Math.sin(a) * 20); ctx.stroke(); }
+  if (u.item){ blob(ctx, u.x - 9, u.y - 6, 4, 4, 0, u.item === 'guard' ? '#D6E8C4' : '#4F7FD8'); }
+  ctx.font = '700 19px "Source Sans 3", sans-serif'; ctx.textAlign = 'center';
+  const w = ctx.measureText(u.name).width + 14; ctx.fillStyle = 'rgba(14,21,17,.85)'; ctx.beginPath(); ctx.roundRect(u.x - w / 2, u.y - 46, w, 25, 12); ctx.fill();
+  ctx.fillStyle = u.sel ? '#D3E63A' : '#EEF2EA'; ctx.fillText(u.name, u.x, u.y - 27);
+}
+let hover = null, box = null;
+const VIEW = {canopy:'faded', light:false, jobs:false};
+// camera: z is the zoom, (cx, cy) the world point at the top-left of the view
+const CAM = {z:1, cx:0, cy:0};
+function clampCam(){ CAM.z = Math.max(1, Math.min(3.5, CAM.z)); CAM.cx = Math.max(0, Math.min(W - W / CAM.z, CAM.cx)); CAM.cy = Math.max(0, Math.min(H - H / CAM.z, CAM.cy));
+  const t = document.getElementById('zoomtag'); if (t){ t.hidden = CAM.z < 1.05; t.textContent = `Zoom ${CAM.z.toFixed(1)}× · right-drag or arrow keys to move`; } }
+function zoomAt(f, sx, sy){ const wx = CAM.cx + sx / S / CAM.z, wy = CAM.cy + sy / S / CAM.z; CAM.z = Math.max(1, Math.min(3.5, CAM.z * f)); CAM.cx = wx - sx / S / CAM.z; CAM.cy = wy - sy / S / CAM.z; clampCam(); closeMenu(); }
+function panBy(dxScreen, dyScreen){ CAM.cx -= dxScreen / S / CAM.z; CAM.cy -= dyScreen / S / CAM.z; clampCam(); }
+// what still needs doing, for the Show jobs markers
+const JOBCOL = {check:'#F2F2EA', invasive:'#EE7F73', stump:'#F2A541', litter:'#E3C34A', carry:'#7FD28A', guard:'#6CC3E0', scrub:'#C58AE6', coppice:'#D9C46A', ash:'#E08A4A'};
+const JOBNAME = {check:'Shrub to identify (look closely)', invasive:'Invasive shrub to cut', stump:'Stump to treat', litter:'Rubbish to clear', carry:'Load to carry back', guard:'Sapling to guard', scrub:'Bramble or scrub to cut', coppice:'Hazel to coppice', ash:'Dying ash'};
+function jobKind(o){ const d = DEF[o.type], s = o.state;
+  if (inBuffer(o) && (d.shrub || d.smother || o.type === 'hazel') && !(o.loads && o.loads.length)) return null;
+  if (o.loads && o.loads.length) return 'carry';
+  if (d.shrub && !o.identified && s === 'present') return 'check';
+  if (d.inv && d.shrub && s === 'present') return 'invasive';
+  if (d.inv && s === 'stump') return 'stump';
+  if (d.cat === 'litter' && s === 'present') return 'litter';
+  if (o.type === 'sapling' && s === 'present' && !inBramble(o)) return 'guard';
+  if (d.smother && s === 'present' && !(o.type === 'bramble' && shelters(o)) && (o.type === 'nettle' ? SEASON !== 'Winter' : !GROWING())) return 'scrub';
+  if (o.type === 'hazel' && s === 'present' && !GROWING()) return 'coppice';
+  if (o.type === 'ash' && s === 'present') return 'ash';
+  return null; }
+function drawJobs(){ const k = 1 / CAM.z, t = performance.now() / 600;
+  for (const o of OBJS){ if (o.state === 'gone') continue; const j = jobKind(o); if (!j) continue;
+    const R = (j === 'carry' ? 16 : Math.max(Math.min(o.r, 70), 16) + 6), pulse = 1 + Math.sin(t + o.id) * .06;
+    ctx.lineWidth = 4 * Math.max(.6, k); ctx.strokeStyle = 'rgba(14,21,17,.8)'; ctx.beginPath(); ctx.arc(j === 'carry' ? o.x + o.r * .55 : o.x, j === 'carry' ? o.y + o.r * .55 : o.y, R * pulse + 1.5, 0, 6.28); ctx.stroke();
+    ctx.lineWidth = 2.5 * Math.max(.6, k); ctx.strokeStyle = JOBCOL[j]; ctx.beginPath(); ctx.arc(j === 'carry' ? o.x + o.r * .55 : o.x, j === 'carry' ? o.y + o.r * .55 : o.y, R * pulse, 0, 6.28); ctx.stroke(); } }
+function renderLegend(){ const el = document.getElementById('joblegend'); if (!VIEW.jobs){ el.hidden = true; return; }
+  const kinds = [...new Set(OBJS.filter(o => o.state !== 'gone').map(jobKind).filter(Boolean))];
+  el.hidden = !kinds.length; el.innerHTML = kinds.map(j => `<i style="border-color:${JOBCOL[j]}"></i><span>${JOBNAME[j]}</span>`).join(''); }
+function draw(){
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#3b3a24'; ctx.fillRect(0, 0, cv.width, cv.height);
+  const zk = DPR * S * CAM.z; ctx.setTransform(zk, 0, 0, zk, -CAM.cx * zk, -CAM.cy * zk);
+  if (BG) ctx.drawImage(BG, 0, 0, W, H);
+  if (!shadeLayer) shadeLayer = buildShade(); ctx.imageSmoothingEnabled = true; ctx.drawImage(shadeLayer, 0, 0, W, H);
+  const TINT = {Winter:'rgba(150,160,180,.18)', Spring:'rgba(110,160,60,.08)', Summer:'rgba(50,110,40,.14)', Autumn:'rgba(170,100,30,.08)'}; ctx.fillStyle = TINT[SEASON]; ctx.fillRect(0, 0, W, H);
+  if (!floraLayer) floraLayer = buildFloraLayer(); ctx.drawImage(floraLayer, 0, 0, W, H);
+  drawMeet();
+  // understorey, regeneration, trunks, deadwood, litter
+  const order = [...OBJS].sort((a, b) => (a.type === 'bramble' ? -1 : 0) - (b.type === 'bramble' ? -1 : 0) || a.y - b.y);
+  for (const o of order){ if (o.state === 'gone') continue; if (o.state === 'cutback'){ drawLoads(o); continue; } const sp = sprite(o); ctx.drawImage(sp, o.x - o.spriteSize / 2, o.y - o.spriteSize / 2, o.spriteSize, o.spriteSize); drawLoads(o);
+    if (o.flash > 0){ ctx.strokeStyle = `rgba(211,230,58,${o.flash})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(o.x, o.y, Math.max(o.r, 20) + 8 + (1 - o.flash) * 20, 0, 6.28); ctx.stroke(); } }
+  // canopy layer
+  const crowns = OBJS.filter(isCanopyNow);
+  if (VIEW.canopy === 'hidden'){ ctx.strokeStyle = 'rgba(240,240,220,.22)'; ctx.lineWidth = 2; ctx.setLineDash([6, 6]); crowns.forEach(o => { ctx.beginPath(); ctx.arc(o.x, o.y, DEF[o.type].crown * .9, 0, 6.28); ctx.stroke(); }); ctx.setLineDash([]); }
+  else { ctx.globalAlpha = VIEW.canopy === 'full' || SEASON === 'Winter' ? .95 : .55; crowns.forEach(o => { const cs = crownSprite(o); ctx.drawImage(cs, o.x - o.crownSize / 2, o.y - o.crownSize / 2, o.crownSize, o.crownSize); }); ctx.globalAlpha = 1; }
+  if (VIEW.light){ if (!lightLayer) lightLayer = buildLightLayer(); ctx.drawImage(lightLayer, 0, 0, W, H); }
+  ctx.font = '700 21px "Zilla Slab", Georgia, serif'; ctx.fillStyle = 'rgba(14,21,17,.85)'; ctx.beginPath(); ctx.roundRect(MEET.x + 6, MEET.y + MEET.h - 40, 132, 32, 16); ctx.fill(); ctx.fillStyle = '#D3E63A'; ctx.fillText(MEETLABEL, MEET.x + 20, MEET.y + MEET.h - 17);
+  for (const o of OBJS){ if (o.need > 0 && o.work > 0){ const w = 84; ctx.fillStyle = 'rgba(14,21,17,.88)'; ctx.fillRect(o.x - w / 2 - 3, o.y - Math.max(o.r, 20) - 22, w + 6, 14); ctx.fillStyle = '#D3E63A'; ctx.fillRect(o.x - w / 2, o.y - Math.max(o.r, 20) - 19, w * Math.min(1, o.work / o.need), 8); } }
+  LOCK.forEach(id => { const z = ZMAP[id]; ctx.fillStyle = 'rgba(14,21,17,.55)'; ctx.fillRect(z.x, z.y, z.w, z.h); ctx.save(); ctx.beginPath(); ctx.rect(z.x, z.y, z.w, z.h); ctx.clip(); ctx.strokeStyle = 'rgba(230,236,226,.12)'; ctx.lineWidth = 6; for (let k = -z.h; k < z.w; k += 26){ ctx.beginPath(); ctx.moveTo(z.x + k, z.y + z.h); ctx.lineTo(z.x + k + z.h, z.y); ctx.stroke(); } ctx.restore();
+    ctx.font = '600 20px "Source Sans 3", sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(230,236,226,.85)'; ctx.fillText('Not yet in your care', z.x + z.w / 2, z.y + z.h / 2); ctx.textAlign = 'left'; });
+  OBJS.filter(o => o.type === 'sett').forEach(o => { ctx.save(); ctx.setLineDash([10, 8]); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(230,200,120,.75)'; ctx.beginPath(); ctx.arc(o.x, o.y, SETT_R, 0, 6.28); ctx.stroke(); ctx.setLineDash([]); ctx.font = '600 16px "Source Sans 3", sans-serif'; ctx.fillStyle = 'rgba(230,200,120,.9)'; ctx.textAlign = 'center'; ctx.fillText(`${o.name || 'Sett'}: no cutting`, o.x, o.y - SETT_R - 8); ctx.textAlign = 'left'; ctx.restore(); });
+  if (VIEW.jobs) drawJobs();
+  UNITS.slice().sort((a, b) => a.y - b.y).forEach(drawUnit);
+  if (hover && hover.state !== 'gone' && hover.state !== 'cutback'){ ctx.font = '600 21px "Source Sans 3", sans-serif'; ctx.textAlign = 'center'; const t = dispName(hover), w = ctx.measureText(t).width + 22, y = hover.y + Math.max(hover.r, 20) + 8; ctx.fillStyle = 'rgba(14,21,17,.9)'; ctx.beginPath(); ctx.roundRect(hover.x - w / 2, y, w, 30, 15); ctx.fill(); ctx.fillStyle = '#EEF2EA'; ctx.fillText(t, hover.x, y + 22); }
+  if (box){ ctx.strokeStyle = '#D3E63A'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.strokeRect(Math.min(box.x0, box.x1), Math.min(box.y0, box.y1), Math.abs(box.x1 - box.x0), Math.abs(box.y1 - box.y0)); ctx.setLineDash([]); ctx.fillStyle = 'rgba(211,230,58,.08)'; ctx.fillRect(Math.min(box.x0, box.x1), Math.min(box.y0, box.y1), Math.abs(box.x1 - box.x0), Math.abs(box.y1 - box.y0)); }
+  if (G.t > 870){ ctx.fillStyle = `rgba(30,20,50,${Math.min(.18, (G.t - 870) / 30 * .18)})`; ctx.fillRect(0, 0, W, H); }
+}
+
+// ===================== menu =====================
+const menu = document.getElementById('menu');
+function selected(){ return UNITS.filter(u => u.sel); }
+function nearestFree(o){ const free = UNITS.filter(u => !busy(u) && !u.queue.length); const minQ = Math.min(...UNITS.map(u => u.queue.length + (busy(u) ? 1 : 0))); const pool = free.length ? free : UNITS.filter(u => u.queue.length + (busy(u) ? 1 : 0) === minQ); return pool.slice().sort((a, b) => Math.hypot(a.x - o.x, a.y - o.y) - Math.hypot(b.x - o.x, b.y - o.y))[0]; }
+function options(o){
+  const d = DEF[o.type], s = o.state, out = [];
+  if (G.peek) return o.identified ? [] : [{k:'inspect', t:'Look closely', h:'Free, instant'}];
+  if (inBuffer(o) && o.type !== 'sett') out.push({k:'none', t:'Inside the badger sett buffer', dis:'Leave this alone: cutting here risks disturbing a protected sett.'});
+  if (!o.identified) out.push({k:'inspect', t:'Look closely', h:'Free, instant'});
+  if (d.shrub && s === 'present') out.push({k:'clear', t:'Cut and clear', h:`About ${d.work} volunteer-minutes, then carry the brash to the fire`, dis:o.identified && d.native ? 'Native holly: cut it for produce instead, or leave it' : null, warn:!o.identified});
+  if (d.nshrub && o.type !== 'hazel' && s === 'present' && o.identified){ const val = (d.produce || []).reduce((a, k) => a + PRICE[k], 0);
+    out.push({k:'harvest', t:'Cut for produce', h:`About ${d.work} minutes. ${val ? `Sells for £${val}` : 'No sale value'}; lets light in for flowers, but loses a native shrub${GROWING() ? '. NESTING SEASON: risk of disturbing birds' : ''}`, warn:true}); }
+  if (d.smother && s === 'present'){ const sh = o.type === 'bramble' && shelters(o), nest = GROWING() && o.type !== 'nettle';
+    if (o.type === 'nettle' && SEASON === 'Winter') out.push({k:'cutback', t:'Cut the nettles', dis:'Died back for the winter. They will be up again in spring.'});
+    else out.push({k:'cutback', t:`Cut back the ${o.type === 'nettle' ? 'nettles' : d.label.toLowerCase()}`, h:[sh ? 'Exposes the oak sapling it shelters' : `About ${d.work} minutes. Lets the woodland flowers through`, o.type === 'dogwood' ? 'stems chipped and sold (£4)' : o.type === 'nettle' ? (GROWING() ? 'young tops sell for nettle tea (£2)' : 'no sale value this late in the year') : 'cuttings stacked as a dead hedge', nest ? 'NESTING SEASON: risk of disturbing birds' : ''].filter(Boolean).join('; '), warn:sh || nest}); }
+  if (d.shrub && s === 'stump' && !d.native) out.push({k:'treat', t:'Treat the stumps', h:`Fetch the herbicide kit from the trailer, about 6 minutes; £${HERB_COST} of chemicals`, dis:KIT('herbicide') ? null : 'Needs the herbicide kit and spraying certificate (tool store). Without it the stumps will resprout within a year.'});
+  if (o.type === 'hazel' && s === 'present') out.push({k:'coppice', t:'Coppice this stool', h:`About ${d.work} minutes; poles and pea sticks to bundle`, dis:GROWING() ? 'Coppice in autumn or winter, while the hazel is dormant and birds are not nesting' : null});
+  if (o.type === 'ash' && s === 'present') out.push({k:'fell', t:'Fell it away from the path', h:'About 45 minutes with the chainsaw; needs a confident operator (not Priya or Sam)', dis:KIT('chainsaw') ? null : 'A tree this size needs a chainsaw and a certified operator (tool store). Leave it for now; it may come down on its own.'});
+  if (o.type === 'ash' && s === 'felled'){ out.push({k:'firewood', t:'Cut it up for firewood', h:'About 25 minutes, 3 loads to sell. Lowers the deadwood score.', warn:true}); out.push({k:'leave', t:'Leave it as deadwood', h:'Instant. Habitat for fungi and beetles.'}); }
+  if (o.type === 'deadwood' && s === 'present') out.push({k:'firewood', t:'Take it for firewood', h:'About 12 minutes, 2 loads to sell. Lowers the deadwood score.', warn:true});
+  if (o.type === 'balsam') out.push({k:'pull', t:'Pull the balsam', h:'Out of season', dis:'It set seed in August. Pull it next June, before it flowers.'});
+  if (d.cat === 'litter' && s === 'present') out.push({k:'pick', t:'Take it to the skip', h:`About ${d.work} minutes; £${d.cost} to dispose of`});
+  if (o.type === 'sapling' && s === 'present') out.push({k:'guard', t:'Fit a tree guard', h:`Fetch a guard from the trailer, about 8 minutes; £${GUARD_COST} a guard`, dis:inBramble(o) ? 'Already protected: deer can\u2019t reach it through the bramble' : null});
+  if (o.loads.length && !UNITS.some(u => u.task && u.task.o === o && u.task.kind === 'haul')) out.push({k:'haul', t:`Carry back ${o.loads.length} load${o.loads.length > 1 ? 's' : ''}`, h:'To the meet point'});
+  return out;
+}
+function openMenu(o, cx, cy){
+  const d = DEF[o.type], opts = options(o), sel = selected();
+  const chip = o.identified ? `<span class="chip ${d.cat}">${{invasive:'Invasive non-native', native:'Native', habitat:'Habitat', litter:'Rubbish'}[d.cat]}</span>` : '<span class="chip unknown">Not yet identified</span>';
+  const nf = UNITS.length ? nearestFree(o) : null, who = sel.length ? `Sending: ${sel.map(u => u.name).join(', ')}` : nf ? `Nobody selected: ${nf.name} (nearest free) will go` : '';
+  menu.innerHTML = `${chip}<h3>${dispName(o)}</h3>${o.identified && d.latin ? `<p class="latin">${d.latin}</p>` : ''}<p>${o.identified ? d.note : 'A glossy evergreen shrub. Several species look alike from a distance.'}</p>${o.identified && FACTS[o.type] ? `<details class="facts"><summary>${FACTS[o.type].title}</summary><ul>${FACTS[o.type].items.map(t => `<li>${t}</li>`).join('')}</ul></details>` : ''}${o.type === 'veteran' ? (h => `<p class="who"><b>Halo:</b> ${h.done} of ${h.total} crowding shrubs cleared${h.done === h.total ? '. Its crown has room to breathe again.' : '. Clear the evergreens around it.'}</p>`)(haloStatus(o)) : ''}<p class="who">Light reaching the floor here: ${pct(lightAt(o.x, o.y))}</p>
+    ${opts.length ? `<div class="acts">${opts.map(op => `<button class="act ${op.warn ? 'warn' : ''}" type="button" data-k="${op.k}" ${op.dis ? 'disabled' : ''}>${op.t}<span>${op.dis || op.h}</span></button>`).join('')}</div>` : '<p class="who">Nothing more to do here today.</p>'}
+    ${G.peek ? '<p class="who">You are on your own today. Bring a party to work on this.</p>' : opts.some(op => !op.dis && op.k !== 'inspect' && op.k !== 'leave') ? `<p class="who">${who}</p>` : ''}`;
+  menu.hidden = false;
+  const sr = stage.getBoundingClientRect(), mw = menu.offsetWidth, mh = menu.offsetHeight;
+  let left = cx + 14, topY = cy - 20; if (left + mw > sr.width - 8) left = cx - mw - 14; if (topY + mh > sr.height - 8) topY = sr.height - mh - 8; if (topY < 8) topY = 8; if (left < 8) left = 8;
+  menu.style.left = left + 'px'; menu.style.top = topY + 'px';
+  menu.onclick = e => { const b = e.target.closest('.act'); if (!b || b.disabled) return; act(o, b.dataset.k, cx, cy); };
+}
+function act(o, k, cx, cy){
+  if (k === 'inspect'){ o.identified = true; o.sprite = null; log(`Looked closely: ${DEF[o.type].label.toLowerCase()}.`, 'info'); openMenu(o, cx, cy); return; }
+  if (G.over){ closeMenu(); return; }
+  if (k === 'leave'){ o.state = 'habitat'; o.sprite = null; o.flash = 1; log('Ash trunk left on the ground as deadwood habitat.', 'good'); closeMenu(); return; }
+  if (LOCK.has(o.zone)){ toast('That part of the wood isn’t in your care yet.', true); return; }
+  let us = selected(); if (!us.length) us = [nearestFree(o)];
+  if (k === 'haul'){ us.forEach(u => giveTask(u, {kind:'haul', o, phase:null})); closeMenu(); deselectAll(); return; }
+  assign(us, k, o); closeMenu(); deselectAll();
+}
+function closeMenu(){ menu.hidden = true; }
+function deselectAll(){ UNITS.forEach(u => u.sel = false); renderSide(true); }
+const pct = v => Math.round(v * 100) + '%';
+function placeMenu(cx, cy){ menu.hidden = false; const sr = stage.getBoundingClientRect(), mw = menu.offsetWidth, mh = menu.offsetHeight;
+  let left = cx + 14, topY = cy - 20; if (left + mw > sr.width - 8) left = cx - mw - 14; if (topY + mh > sr.height - 8) topY = sr.height - mh - 8; if (topY < 8) topY = 8; if (left < 8) left = 8;
+  menu.style.left = left + 'px'; menu.style.top = topY + 'px'; }
+function openGround(x, y, cx, cy){
+  menu.onclick = null;
+  if (!inPlay(x, y)){ menu.innerHTML = `<h3>${beyondName(x, y)}</h3><p>Beyond the edge of ${PLACE}. Today's work is inside the dashed line; this ground is shown so you can see how the rides and neighbours join up.</p>`; placeMenu(cx, cy); return; }
+  if (onRun(x, y) && !onRide(x, y)){ menu.innerHTML = '<h3>Badger run</h3><p>A narrow path worn bare by badgers travelling between their setts and out to feed. They use the same runs every night for generations. Leave them clear: no brash, dead hedges or tree guards across them.</p>'; placeMenu(cx, cy); return; }
+  let z = zoneAt(x, y); if (z !== 'meet' && onRide(x, y)) z = 'ride'; else if (z !== 'meet' && onTrack(x, y)) z = 'track';
+  if (z === 'track'){ menu.innerHTML = '<h3>Minor ride</h3><p>A narrower track between compartments. Slower than a main ride, but much quicker than pushing through the thicket.</p>'; placeMenu(cx, cy); return; }
+  if (z === 'ride' || z === 'meet'){ menu.innerHTML = `<h3>${z === 'meet' ? 'Meet point' : 'Main ride'}</h3><p>${z === 'meet' ? 'Tools, tea urn, the fire for invasive brash, and the skip. Everything you cut ends up here.' : 'A grassy track winding through the wood. Volunteers move fastest along the rides; thickets slow them down. Sunny ride edges are good habitat for butterflies.'}</p>`; placeMenu(cx, cy); return; }
+  const i = cellIdx(x, y), l0 = L0[i], l = LIGHT[i], f = FLORA[i], uniq = a => [...new Set(a)];
+  const above = OBJS.filter(o => isCanopyNow(o) && Math.hypot(o.x - x, o.y - y) < DEF[o.type].crown * .95).map(o => o.name || DEF[o.type].label.toLowerCase());
+  const os = OBJS.filter(o => Math.hypot(o.x - x, o.y - y) < 260 && o.state !== 'gone');
+  const canopy = uniq(os.filter(isCanopyNow).map(o => o.type === 'veteran' ? 'veteran oak' : DEF[o.type].label.replace('Oak standard', 'oak').toLowerCase()));
+  const under = uniq(os.filter(o => ['hazel','holly','hawthorn','elder','blackthorn','laurel','laurelSmall','rhodo','rhodoSmall'].includes(o.type) && (o.state === 'present' || o.state === 'coppiced')).map(o => o.identified ? DEF[o.type].label.toLowerCase() : 'unidentified evergreens'));
+  const notes = [];
+  if (brambleOver(x, y)) notes.push('Bramble, dogwood or nettles are smothering the ground here. Nothing else will flower until they are cut back.');
+  else if (l >= .35 && f < .25) notes.push('There is enough light here now. Woodland flowers will spread in over the next few seasons.');
+  else if (l < .2) notes.push('Too dark for woodland flowers. Something above is casting heavy shade.');
+  if (l - l0 > .12) notes.push(`More light reaches here than this morning (${pct(l0)} → ${pct(l)}). Expect flowers to respond from next spring.`);
+  menu.innerHTML = `<span class="chip habitat">Woodland floor</span><h3>${PLACE}</h3><p><b>Growing here:</b> ${floraAt(x, y, l0)}, and ${floraWord(f)}.</p>
+    <p class="who">Light reaching the floor: ${pct(l)} · ${above.length ? 'under ' + uniq(above).join(', ') : 'open sky above'}</p>
+    ${notes.map(n => `<p>${n}</p>`).join('')}
+    <p class="who"><b>Layers nearby</b><br>Canopy: ${canopy.join(', ') || 'none'}<br>Understorey: ${under.join(', ') || 'none'}</p>`;
+  placeMenu(cx, cy);
+}
+
+// ===================== input =====================
+function toWorld(e){ const r = stage.getBoundingClientRect(); return [CAM.cx + (e.clientX - r.left) / S / CAM.z, CAM.cy + (e.clientY - r.top) / S / CAM.z]; }
+let down = null, pressT = 0;
+function rightAction(x, y, cx, cy){
+  const o = objAt(x, y), sel = selected();
+  if (LOCK.has(zoneAt(x, y))){ toast('That part of the wood isn’t in your care yet. Ask the Trust for it on the valley map.', true); return; }
+  if (o){ const opts = options(o).filter(op => !op.dis && op.k !== 'inspect' && op.k !== 'leave');
+    if (sel.length && opts.length === 1){ act(o, opts[0].k, cx, cy); return; }
+    openMenu(o, cx, cy); return; }
+  if (sel.length && !inPlay(x, y)){ toast(`That's ${beyondName(x, y)}, outside today's compartment.`, true); return; }
+  if (sel.length){ sel.forEach((v, i) => giveTask(v, {kind:'move', pt:[x + (i % 3) * 18 - 18, y + Math.floor(i / 3) * 18], phase:null})); closeMenu(); deselectAll(); }
+}
+cv.addEventListener('contextmenu', e => e.preventDefault());
+const TP = new Map(); let pinchT = null;
+cv.addEventListener('pointerdown', e => { if (!G.running && !G.over && !G.peek) return;
+  if (e.pointerType !== 'mouse'){ TP.set(e.pointerId, {x:e.clientX, y:e.clientY}); if (TP.size === 2){ const [a, b] = [...TP.values()]; pinchT = {d:Math.hypot(a.x - b.x, a.y - b.y), mx:(a.x + b.x) / 2, my:(a.y + b.y) / 2}; clearTimeout(pressT); down = null; box = null; return; } }
+  if (e.button === 1){ e.preventDefault(); }
+  const [x, y] = toWorld(e);
+  down = {x, y, sx:e.clientX, sy:e.clientY, lx:e.clientX, ly:e.clientY, shift:e.shiftKey || e.metaKey || e.ctrlKey, right:e.button === 2 || e.button === 1, mid:e.button === 1, touch:e.pointerType !== 'mouse', long:false, panned:false};
+  cv.setPointerCapture(e.pointerId);
+  clearTimeout(pressT); if (down.touch){ const d = down; pressT = setTimeout(() => { if (down === d && !box){ d.long = true; const r = stage.getBoundingClientRect(), o = objAt(d.x, d.y); if (o) openMenu(o, d.sx - r.left, d.sy - r.top); else openGround(d.x, d.y, d.sx - r.left, d.sy - r.top); } }, 500); } });
+cv.addEventListener('pointermove', e => {
+  if (TP.has(e.pointerId)) TP.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if (pinchT && TP.size === 2){ const [a, b] = [...TP.values()], r = stage.getBoundingClientRect(), d = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    panBy(mx - pinchT.mx, my - pinchT.my); zoomAt(d / Math.max(1, pinchT.d), mx - r.left, my - r.top); pinchT = {d, mx, my}; return; }
+  if (down && down.right && Math.hypot(e.clientX - down.sx, e.clientY - down.sy) > 6){ down.panned = true; panBy(e.clientX - down.lx, e.clientY - down.ly); down.lx = e.clientX; down.ly = e.clientY; cv.style.cursor = 'grabbing'; return; }
+  const [x, y] = toWorld(e);
+  if (down && !down.right && Math.hypot(e.clientX - down.sx, e.clientY - down.sy) > 8){ clearTimeout(pressT); box = {x0:down.x, y0:down.y, x1:x, y1:y}; return; }
+  if (e.pointerType === 'mouse'){ const o = objAt(x, y); hover = o; cv.style.cursor = o || UNITS.some(u => Math.hypot(u.x - x, u.y - y) < 16) ? 'pointer' : 'default'; }
+});
+cv.addEventListener('pointerup', e => {
+  TP.delete(e.pointerId); if (pinchT){ if (TP.size < 2) pinchT = null; return; }
+  clearTimeout(pressT); const d = down; down = null; if (!d || d.long) return; if (d.panned){ cv.style.cursor = 'default'; return; }
+  const [x, y] = toWorld(e), r = stage.getBoundingClientRect(), cx = e.clientX - r.left, cy = e.clientY - r.top;
+  if (d.right){ if (!d.mid && !G.over && !G.peek) rightAction(x, y, cx, cy); return; }
+  if (box){ const x0 = Math.min(box.x0, box.x1), x1 = Math.max(box.x0, box.x1), y0 = Math.min(box.y0, box.y1), y1 = Math.max(box.y0, box.y1);
+    const hit = UNITS.filter(u => u.x >= x0 && u.x <= x1 && u.y >= y0 && u.y <= y1); if (!d.shift) UNITS.forEach(u => u.sel = false); hit.forEach(u => u.sel = true); box = null; closeMenu(); renderSide(true); return; }
+  const u = UNITS.slice().sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y))[0];
+  if (u && Math.hypot(u.x - x, u.y - y) < (d.touch ? 36 : 24)){ if (d.shift || d.touch) u.sel = !u.sel; else { UNITS.forEach(v => v.sel = false); u.sel = true; } closeMenu(); renderSide(true); return; }
+  // on a touchscreen a tap gives orders when volunteers are selected
+  if (d.touch && selected().length && !G.over && !G.peek){ rightAction(x, y, cx, cy); return; }
+  // any other left click clears the selection, then shows what was clicked
+  if (selected().length) deselectAll();
+  const o = objAt(x, y);
+  if (o){ openMenu(o, cx, cy); return; }
+  if (!menu.hidden){ closeMenu(); return; }
+  openGround(x, y, cx, cy);
+});
+cv.addEventListener('pointerleave', () => { hover = null; });
+cv.addEventListener('pointercancel', e => { TP.delete(e.pointerId); if (TP.size < 2) pinchT = null; down = null; });
+cv.addEventListener('auxclick', e => e.preventDefault());
+cv.addEventListener('wheel', e => { e.preventDefault(); const r = stage.getBoundingClientRect();
+  if (!e.ctrlKey && (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY))){ panBy(-e.deltaX - (e.shiftKey ? e.deltaY : 0), 0); return; }
+  const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY; zoomAt(Math.exp(-Math.max(-120, Math.min(120, dy)) * (e.ctrlKey ? .01 : .0025)), e.clientX - r.left, e.clientY - r.top); }, {passive:false});
+document.getElementById('zoomIn').onclick = () => zoomAt(1.5, stage.clientWidth / 2, stage.clientHeight / 2);
+document.getElementById('zoomOut').onclick = () => zoomAt(1 / 1.5, stage.clientWidth / 2, stage.clientHeight / 2);
+document.getElementById('zoomFit').onclick = () => { CAM.z = 1; CAM.cx = 0; CAM.cy = 0; clampCam(); };
+document.getElementById('jobsBtn').onclick = e => { VIEW.jobs = !VIEW.jobs; e.currentTarget.setAttribute('aria-pressed', VIEW.jobs); renderLegend(); };
+document.addEventListener('keydown', e => { if (e.target.closest && e.target.closest('input,textarea')) return; const step = 60;
+  if (e.key === 'ArrowLeft') panBy(step, 0); else if (e.key === 'ArrowRight') panBy(-step, 0); else if (e.key === 'ArrowUp') panBy(0, step); else if (e.key === 'ArrowDown') panBy(0, -step);
+  else if (e.key === '+' || e.key === '=') zoomAt(1.25, stage.clientWidth / 2, stage.clientHeight / 2); else if (e.key === '-' || e.key === '_') zoomAt(1 / 1.25, stage.clientWidth / 2, stage.clientHeight / 2); else return; e.preventDefault(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape'){ closeMenu(); UNITS.forEach(u => u.sel = false); renderSide(true); } });
+
+// ===================== side panels =====================
+const crewEl = document.getElementById('crew');
+let lastSide = 0;
+function renderSide(force){
+  const now = performance.now(); if (!force && now - lastSide < 250) return; lastSide = now;
+  UNITS.forEach(u => u.status = statusOf(u));
+  crewEl.innerHTML = UNITS.map(u => `<button class="vol" type="button" data-i="${u.idx}" aria-pressed="${u.sel}"><span class="dot" style="background:${u.col}"></span><b>${u.name}<em>${u.role}</em></b><span class="st">${u.status}</span><span class="bar"><i style="width:${Math.round(u.stamina)}%;background:${u.stamina < 30 ? '#EE7F73' : u.stamina < 60 ? '#E2AE45' : '#6CC488'}"></i></span></button>`).join('');
+  document.getElementById('bank').innerHTML = [
+    ['Brash burnt (loads)', G.bank.burnt, 0],
+    ['Hazel poles (bundles)', G.bank.poles, G.bank.poles * PRICE.poles],
+    ['Pea sticks (bundles)', G.bank.peasticks, G.bank.peasticks * PRICE.peasticks],
+    ['Firewood (loads)', G.bank.firewood, G.bank.firewood * PRICE.firewood],
+    ['Holly greenery (bundles)', G.bank.greenery, G.bank.greenery * PRICE.greenery],
+    ['Dogwood woodchip (bags)', G.bank.woodchip, G.bank.woodchip * PRICE.woodchip],
+    ['Nettle tops (bags)', G.bank.nettles, G.bank.nettles * PRICE.nettles],
+    ['Skip disposal', G.skipItems, -G.skipCost],
+    ['Tree guards used', G.guards, -G.guards * GUARD_COST],
+    ['Herbicide (stumps)', G.treated, -G.treated * HERB_COST],
+  ].map(([a, n, v]) => `<dt>${a}</dt><dd>${n}</dd><dd>${v < 0 ? '−£' + (-v) : '£' + v}</dd>`).join('');
+  const ct = assessTile(); document.getElementById('zones').innerHTML = `<div class="condhead"><b>${PLACE}</b><span class="band ${ct.band}">${ct.band}</span></div>` + Object.keys(ct.ind).map(k => `<div class="sub"><span>${INDNAME[k]}</span><span class="band ${BANDOF(ct.ind[k])}">${BANDOF(ct.ind[k])}</span></div>`).join('');
+  const t = Math.floor(G.t), hh = Math.floor(t / 60), mm = t % 60;
+  document.getElementById('clock').textContent = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  document.getElementById('gw').textContent = Math.round(G.gw) + '%';
+  const v = bankValue(); document.getElementById('val').textContent = (v < 0 ? '−£' : '£') + Math.abs(v);
+  const gs = computeGoals(); document.getElementById('goalpct').textContent = gs.none ? '—' : gs.pct + '%';
+  document.getElementById('goals').innerHTML = (gs.none ? '<li class="done"><span>Nothing urgent here today. The compartment needs time for the flowers to come back.</span></li>' : '') + gs.list.map(g => `<li class="${g.keep ? 'keep' : ''} ${g.done >= g.total ? 'done' : ''} ${g.keep && g.done < g.total ? 'bad' : ''}"><span>${g.name}</span><em>${g.done}/${g.total}</em><span class="gb"><i style="width:${g.pct}%"></i></span></li>`).join('');
+  if (VIEW.jobs) renderLegend();
+  const cs = document.getElementById('clearsel'), ns = selected().length; cs.hidden = !ns; cs.textContent = `Clear selection (${ns})`;
+  const eb = document.getElementById('early'); eb.hidden = !(gs.allDone && G.running && !G.over);
+  if (gs.allDone && G.running && !G.announcedDone){ G.announcedDone = true; toast('Every job is done. You can finish early.'); log('Every job on the list is done. The crew can head home early.', 'good'); }
+}
+crewEl.addEventListener('click', e => { const b = e.target.closest('.vol'); if (!b) return; const u = UNITS[+b.dataset.i];
+  if (e.shiftKey || e.metaKey || e.ctrlKey || matchMedia('(pointer:coarse)').matches) u.sel = !u.sel; else { const only = u.sel && selected().length === 1; UNITS.forEach(v => v.sel = false); u.sel = !only; } renderSide(true); });
+function log(msg, cls){ const t = Math.floor(G.t); G.log.unshift({t:`${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`, msg, cls}); document.getElementById('log').innerHTML = G.log.slice(0, 60).map(l => `<li class="${l.cls}"><b>${l.t}</b><span>${l.msg}</span></li>`).join(''); }
+let tt; function toast(msg, bad){ const el = document.getElementById('toast'); el.textContent = msg; el.className = 'toast show' + (bad ? ' bad' : ''); clearTimeout(tt); tt = setTimeout(() => el.className = 'toast', 2800); }
+
+// ===================== controls =====================
+function setSpeed(s){ G.speed = s; document.querySelectorAll('[data-speed]').forEach(b => b.setAttribute('aria-pressed', +b.dataset.speed === s)); }
+document.querySelectorAll('[data-speed]').forEach(b => b.onclick = () => setSpeed(+b.dataset.speed));
+document.getElementById('tea').onclick = () => {
+  if (!G.running || G.t < G.teaUntil) return;
+  G.teaUntil = G.t + 20 + 6; UNITS.forEach(u => { if (u.task && u.task.kind !== 'tea') u.saved = (u.task.kind === 'haul' && u.task.phase === 'deliver') || u.task.kind === 'rest' ? null : u.task; if (u.carrying.length) deliver(u); u.task = {kind:'tea', phase:null}; plan(u); });
+  log('Tea break called. Everyone heads back to the urn.', 'info');
+};
+document.getElementById('canopyBtn').onclick = e => { VIEW.canopy = {faded:'full', full:'hidden', hidden:'faded'}[VIEW.canopy]; e.currentTarget.textContent = 'Canopy: ' + VIEW.canopy; };
+document.getElementById('lightBtn').onclick = e => { VIEW.light = !VIEW.light; e.currentTarget.setAttribute('aria-pressed', VIEW.light); };
+document.getElementById('start').onclick = () => { document.getElementById('intro').hidden = true; if (G.over) return; if (!UNITS.length) showBrief(); else G.running = true; };
+document.getElementById('clearsel').onclick = () => { closeMenu(); deselectAll(); };
+document.getElementById('help').onclick = () => { if (G.over) return; G.running = false; G.peek = false; document.getElementById('brief').hidden = true; document.getElementById('peekbar').hidden = true; document.getElementById('start').textContent = !UNITS.length ? 'Back to the briefing' : 'Back to work'; document.getElementById('intro').hidden = false; };
+document.getElementById('endday').onclick = () => { if (G.running) finish(); };
+document.getElementById('early').onclick = () => { if (!G.running) return; G.early = true; const left = Math.max(0, 900 - G.t); const bonus = Math.min(5, 1 + Math.round(left / 40)); G.gw = Math.min(100, G.gw + bonus); log(`Finished early. The crew heads home happy, ${Math.round(left)} minutes ahead of time.`, 'good'); finish(); };
+
+// ===================== events =====================
+function events(){
+  const E = G.events;
+  if (!E.tea && G.t > 640 && UNITS.reduce((a, u) => a + u.stamina, 0) / UNITS.length < 45){ E.tea = 1; log('Sam asks if it’s time for tea yet. The crew are flagging: call a tea break before someone is worn out.', 'info'); toast('The crew are flagging. Time for a tea break?'); }
+  if (G.t >= 780 && !E.walker){ E.walker = 1; const gs = computeGoals(), lit = OBJS.filter(o => DEF[o.type].cat === 'litter' && !LOCK.has(o.zone)), litLeft = lit.filter(o => o.state === 'present').length;
+    if (gs.none){ G.gw = Math.min(100, G.gw + 1); log(`A dog walker stops by: "It's really coming back, this bit." The crew agree.`, 'good'); }
+    else if (gs.pct >= 50 && !litLeft){ G.gw = Math.min(100, G.gw + 3); log(`A dog walker stops to watch: "You can actually see into ${PLACE} now." Two of them ask about volunteering.`, 'good'); toast('A dog walker noticed the progress. Goodwill up.'); }
+    else if (gs.pct >= 50){ G.gw = Math.min(100, G.gw + 1); log(`A dog walker stops to chat: "Good work, but shame about that rubbish still lying about."`, 'info'); }
+    else if (gs.pct >= 20){ log('A dog walker nods as they pass. Not much to see yet.', 'info'); }
+    else { G.gw = Math.max(0, G.gw - 1); log('A dog walker asks what the crew have actually been doing all morning.', 'bad'); } }
+  if (G.t >= 870 && !E.late){ E.late = 1; log('Half an hour left. Start bringing loads back to the meet point.', 'info'); toast('Half an hour left.'); }
+  if (G.t >= 900) finish();
+}
+
+// ===================== report =====================
+function finish(){
+  if (G.over) return; G.over = true; G.running = false; closeMenu();
+  const ob = BEFORE, oa = assessTile();
+  const untreated = OBJS.filter(o => DEF[o.type].inv && o.state === 'stump').length;
+  const leftLoads = OBJS.reduce((a, o) => a + o.loads.length, 0) + UNITS.reduce((a, u) => a + u.carrying.length, 0);
+  const coppiced = OBJS.filter(o => o.type === 'hazel' && o.state === 'coppiced' && o.age === 0).length;
+  const notes = [], l0 = floorLight(L0), l1 = floorLight(LIGHT);
+  if (l1 - l0 > .03) notes.push(`<b>More light on the floor: ${pct(l0)} → ${pct(l1)}.</b> Woodland flowers (bluebell, wood anemone, primrose) will spread into the new gaps over the next few seasons. Bramble will race them for the same light.`);
+  if (oa.ind.flowers < 3) notes.push(`<b>Woodland flowers: ${floraWord(oa.flora)}.</b> They are what lifts this compartment to Good, and they only come back season by season, not in a single day.`);
+  if (G.nesting) notes.push(`<b>Cut during the nesting season (${G.nesting}).</b> Shrub and scrub work is best left to autumn and winter, March to August is when birds nest in it. Goodwill took a knock.`);
+  if (G.cutback) notes.push(`<b>${G.cutback} patch${G.cutback > 1 ? 'es' : ''} of bramble, dogwood or nettles cut back.</b> The flowers underneath get a chance, but bramble and dogwood will be back from the roots next spring, and nettles next season. Keep coming back to it.`);
+  if (G.harvested.length){ const c = {}; G.harvested.forEach(n => c[n] = (c[n] || 0) + 1); notes.push(`<b>Cut for produce:</b> ${Object.entries(c).map(([n, k]) => `${n.toLowerCase()} ×${k}`).join(', ')}. Fewer native shrubs for birds and insects, more light for the flowers, and something to sell. They regrow from the stump in a year or so.`); }
+  if (untreated) notes.push(`<b>${untreated} cleared clump${untreated > 1 ? 's' : ''} left untreated.</b> Expect regrowth from the stumps by next autumn; it will show up as invasive cover again.`);
+  if (ZMAP.brook && !LOCK.has('brook')) notes.push('<b>Balsam in Brook gully</b> could not be tackled in October. Put a pulling day in the calendar for June, before it flowers.');
+  if (coppiced) notes.push(`<b>${coppiced} hazel stool${coppiced > 1 ? 's' : ''} coppiced.</b> Deer will browse the regrowth in spring unless the stools are protected.`);
+  if (G.removedDeadwood) notes.push(`<b>Deadwood sold as firewood (${G.removedDeadwood}).</b> It paid, but beetles and fungi lost a home.`);
+  if (G.mistakes.length) notes.push(`<b>Mistakes:</b> ${G.mistakes.join('; ')}. Volunteers with a good eye for plants catch these; Priya rarely misses one.`);
+  if (leftLoads) notes.push(`<b>${leftLoads} load${leftLoads > 1 ? 's' : ''} left in the wood</b> at the end of the day. Brash left out still counts as cleared, but produce left behind earns nothing.`);
+  if (G.early) notes.unshift(`<b>Finished early at ${document.getElementById('clock').textContent}.</b> Every job on the list was done, and the crew went home happy. Goodwill is up, and volunteers who enjoy a day are more likely to come back.`);
+  const gsum = computeGoals(); notes.unshift(`<b>Jobs done: ${gsum.pct}%.</b> ${gsum.list.filter(g => !g.keep).map(g => `${g.name} ${g.done}/${g.total}`).join(' · ')}`);
+  const v = bankValue(), sold = v + G.skipCost;
+  const rows = Object.keys({...ob.ind, ...oa.ind}).map(k => { const b = ob.ind[k], a = oa.ind[k]; return `<tr><td>${INDNAME[k]}</td><td class="band ${BANDOF(b)}">${BANDOF(b)}</td><td class="band ${BANDOF(a)}">${BANDOF(a)}</td><td>${a > b ? '↑' : a < b ? '↓' : ''}</td></tr>`; }).join('');
+  const prod = [['Hazel poles', 'poles'], ['Pea sticks', 'peasticks'], ['Firewood', 'firewood'], ['Holly greenery', 'greenery'], ['Woodchip', 'woodchip'], ['Nettle tops', 'nettles']].filter(([, k]) => G.bank[k]).map(([n, k]) => `${n} ×${G.bank[k]}`).join(', ');
+  const rep = document.getElementById('report');
+  rep.innerHTML = `<div class="sheet"><p class="eyebrow">Condition report · ${document.getElementById('clock').textContent}</p><h2>${PLACE}: ${ob.band} → ${oa.band}</h2>
+    <div class="tablewrap"><table><thead><tr><th>Indicator</th><th>This morning</th><th>Now</th><th></th></tr></thead><tbody>${rows}
+      <tr><td>Light on the floor</td><td>${pct(l0)}</td><td>${pct(l1)}</td><td>${l1 - l0 > .03 ? '↑' : ''}</td></tr></tbody></table></div>
+    <div class="tablewrap"><table><tbody>
+      <tr><td>Produce sold${prod ? ` (${prod})` : ''}</td><td class="num">£${sold}</td></tr>
+      <tr><td>Invasive brash burnt on site (${G.bank.burnt} load${G.bank.burnt === 1 ? '' : 's'}): no value</td><td class="num">£0</td></tr>
+      <tr><td>Skip disposal (${G.skipItems} item${G.skipItems === 1 ? '' : 's'})</td><td class="num">${G.skipCost ? '−£' + G.skipCost : '£0'}</td></tr>
+      ${G.guards ? `<tr><td>Tree guards (${G.guards} × £${GUARD_COST})</td><td class="num">−£${G.guards * GUARD_COST}</td></tr>` : ''}${G.treated ? `<tr><td>Herbicide (${G.treated} stump${G.treated === 1 ? '' : 's'} × £${HERB_COST})</td><td class="num">−£${G.treated * HERB_COST}</td></tr>` : ''}
+      <tr><td><b>Net for the day</b></td><td class="num"><b>${v < 0 ? '−£' : '£'}${Math.abs(v)}</b></td></tr>
+      <tr><td>Goodwill</td><td class="num">${Math.round(G.gw0)}% → ${Math.round(G.gw)}%</td></tr>
+    </tbody></table></div>
+    ${notes.map(n => `<p class="note">${n}</p>`).join('')}
+    <div class="row"><button class="btn" type="button" id="minrep">View the wood</button>${EMBED ? '<button class="btn primary" type="button" id="back">Return to the valley</button>' : ''}</div></div>`;
+  rep.hidden = false;
+  document.getElementById('minrep').onclick = () => { rep.hidden = true; document.getElementById('repmin').hidden = false; };
+  document.getElementById('repshow').onclick = () => { rep.hidden = false; document.getElementById('repmin').hidden = true; };
+  if (EMBED) document.getElementById('back').onclick = () => parent.postMessage({type:'renature-workday', vols:G.party || UNITS.length, net:v, gw:G.gw - G.gw0, band:oa.band, before:ob.band, mistakes:G.mistakes.length, early:G.early, jobs:gsum.none ? null : gsum.pct, flora:encodeFlora(),
+      objs:packObjs(), events:SEASON_EVENTS.filter(e => /veteran|came down|blown|fungus|collapsed|crown/.test(e[0])).map(e => e[0])}, '*');
+  log('Tools cleaned, counted and back in the trailer.', 'info'); renderSide(true);
+}
+
+// ===================== loop =====================
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (G.running && G.speed){ const gdt = dt * G.speed; const n = Math.ceil(G.speed); for (let i = 0; i < n; i++){ G.t += gdt / n; UNITS.forEach(u => step(u, gdt / n)); } events(); }
+  OBJS.forEach(o => { if (o.flash > 0) o.flash = Math.max(0, o.flash - dt * 1.2); });
+  draw(); renderSide(false);
+  requestAnimationFrame(frame);
+}
+window.addEventListener('resize', resize);
+window.addEventListener('message', e => { const d = e.data; if (!d || d.type !== 'renature-init') return;
+  LOCK.clear(); (d.locked || []).forEach(z => LOCK.add(z)); INIT = {tools:d.tools || ['saws'], maxVols:Math.min(12, d.vols || 6), crewFrom:d.crewFrom || 0, staff:d.staff || 0, gw:d.goodwill ?? 58, states:d.states || null, objs:d.objs || null, flora:d.flora || null, seasons:d.seasons || 0, creep:d.creep || 0, cond:d.cond || null, gw:d.goodwill ?? 58}; SEASON = d.season || 'Autumn';
+  if (d.card) applyCard(d.card);
+  if (d.date) document.querySelector('.brand small').textContent = 'Renature · ' + d.date;
+  document.querySelector('#intro .eyebrow').textContent = d.date || 'Work day';
+  reset(); resize(); });
+if (EMBED){ document.body.classList.add('embed'); }
+reset(); resize(); buildBG(); requestAnimationFrame(frame);
+if (EMBED) parent.postMessage({type:'renature-ready'}, '*');
+if (document.fonts) document.fonts.ready.then(() => { OBJS.forEach(o => o.sprite = null); });
+</script>
